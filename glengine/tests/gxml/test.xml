@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<WebServiceConfiguration>
+  <commands>
+      <institutes>
+      </institutes>
+
+      <devices>
+		  <!--
+		<device id="ebk_1056_001">
+			
+			<devCmd  name="CheckForUpdaterUpdate" parameter="">
+				<timewindow interval="daily" start="09:09" stop="09:29" />
+			</devCmd>
+			<devCmd  name="CheckForUpdate" parameter="">			
+				<timewindow interval="daily" start="09:34" stop="09:54" />
+			</devCmd>
+		
+				-->
+		<device id="ebk_1056_002">
+			<devCmd  name="CheckForUpdaterUpdate" parameter="">
+				<timewindow interval="daily" start="09:09" stop="09:29" />
+			</devCmd>
+			<devCmd  name="CheckForUpdate" parameter="">
+				<timewindow interval="daily" start="09:34" stop="09:54" />
+			</devCmd>
+		</device>
+		<!--
+		<device id="ebk_1056_003">
+			<devCmd  name="CheckForUpdaterUpdate" parameter="">
+				<timewindow interval="daily" start="09:09" stop="09:29" />
+			</devCmd>
+			<devCmd  name="CheckForUpdate" parameter="">
+				<timewindow interval="daily" start="09:34" stop="09:54" />
+			</devCmd >
+		</device>
+		-->
+      </devices>      
+      <Bla id="bla1">
+		  <someTag id="foo" />
+      </Bla>
+   </commands>
+</WebServiceConfiguration>
+
+
