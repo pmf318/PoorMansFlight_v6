@@ -1,3 +1,6 @@
+This is an open source viewer/editor for various databases (DB2, Postgres, SqlServer), runing on both Linux and Windows.
+Go to www.leipelt.net for precompiled/ready-to-run versions
+
 License:
 PMF is released under the GPL. 
 A copy of the GPL can be found in gpl.txt in this directory.
