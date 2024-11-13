@@ -1,0 +1,142 @@
+<!DOCTYPE HTML PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN">
+<html>
+<head>
+  <meta name="description" content="table editor for LINUX, OS2, WINDOWS">
+  <title>PoorMan'sFlight</title>
+  <!--<style type="text/css">  body { margin-left:200px; margin-right:200px;  margin-top:80px;}  p,div,table,ul,ol { margin-left:30px; margin-right:30px;} </style>-->
+  <style type="text/css"> 
+      pre {background-color: #EBECE4;margin-left:10px}
+		@media (prefers-color-scheme: dark) {
+		/* dunkles Farbschema für die Nacht */
+		body {
+			color: white;
+			background: black;
+		}
+		
+		a {
+			color: skyblue;
+		}
+}	  
+  </style>
+</head>
+
+<body bgcolor="#ffffff" link="#0000ff" text="#000000">
+
+
+<h3 align="left" style="color: blue;">Examples for password commands in PMF's connection configuration<br></h3><br>
+In some environments, you cannot use a static password. Instead, you need to use a one-time password that will expire after some time.
+After expiration, you will have to fetch a new password. To some degree, this can be automated in PMF.
+<br><br>
+The basic idea is to create a command file (or script) that will echo a password. The file's job is to retrieve a password from 
+an arbitrary source like a keystore, a one-time password via token, an AuthService, an API or some other source. <br><br>
+Ultimately, it needs to echo the retrieved password to stdout, where PMF will pick it up and use it to authenticate.
+<br><br>
+Set an expiration time (in minutes)  in the Field "Timeout" for PMF to autmatically reconnect in the background after n minutes. <br>
+Reconnect will only happen when the field "pWdCmd" is set.
+<br><br>
+
+
+The generalized form for "PwdCmd" (including parameters) is:
+<pre>
+[path to]someExecutable param1 param2 ...	
+</pre>
+where "someExecutable" can be a script (bash, perl, powershell, bat, cmd, ...) or an excutable program.<br>
+For Linux, scripts must be set as executable ("chmod +x [NameOfScript]") with adequate user permissions.
+<br><br><br>
+Following are a few examples for Windows and Linux.
+
+<h3 align="left">Windows:</h3>
+
+<h4 align="left">Batch file</h4>
+Create a simple batch file that will simply echo "mySecretPassword"
+<pre>
+@echo off
+set PWD=mySecretPassword
+echo %PWD%
+</pre>
+and save it as mypwd.bat somewhere. <br><br>
+To use it in PMF, set it in "PwdCmd" like this:
+<pre>
+[Path to]\mypwd.bat
+</pre>
+
+<h4 align="left">Powershell</h4>
+You can also use powershell:<br>
+Create a file "mypwd.ps1" and fill it with this content:
+<pre>
+@echo off
+set PWD=mySecretPassword
+echo %PWD%
+</pre>
+This will echo "mySecretPassword".<br>
+<br>
+To use it in PMF, set the field "PwdCmd" like this:
+<pre>
+pwsh.exe [path]\mypwd.ps1
+</pre>
+In this example, pwsh.exe is the executable while the script (mypwd.ps1) is a parameter. <br>
+pwsh.exe will execute "mypwd.ps1" which in turn will echo "mySecretPassword" to stdout.
+<br>
+<br>
+<br>
+
+
+Following is a more elaborate example that will fetch a password from Azure:
+
+<pre>
+If ($null -eq (Get-AzContext)) {
+    # User Account
+    Connect-AzAccount -WarningAction SilentlyContinue | Out-Null
+}
+ 
+$AzAccessTokenSplat = $null
+$AzAccessTokenSplat = @{
+    ResourceUrl = "https://ossrdbms-aad.database.windows.net"
+}
+  
+$AzAccessToken = $null
+$AzAccessToken = Get-AzAccessToken @AzAccessTokenSplat -Tenant [your tenant-ID]
+  
+$AzAccessToken.Token
+</pre>
+
+<h3 align="left">Linux</h3>
+Create a bash script called "myPwd" and fill it with these lines:<br>
+<pre>
+#!/bin/bash
+PWD=""
+# Some method to set the variable $PWD...
+PWD=mySecretPassword
+# ... and echo it to stdout
+echo $PWD
+</pre>
+This will simply echo "mySecretPassword"<br><br>
+Do not forget to make it executable: 
+<pre>
+chmod +x myPwd
+</pre>
+<br>
+To use it in PMF, set the field "PwdCmd" like this:
+<pre>
+[full path to]/myPwd
+</pre>
+
+The same bash, using a paramater:
+<pre>
+#!/bin/bash
+
+PWD=$1
+echo $PWD
+</pre>
+
+To use it in PMF, set the field "PwdCmd" like this:
+<pre>
+[full path to]/myPwd mySecretPassword
+</pre>
+Again, this will simply echo "mySecretPassword" to stdout so PMF can use it to authenticate.
+
+<br><br><br>
+<br><br><br>
+</body>
+</html>
+
