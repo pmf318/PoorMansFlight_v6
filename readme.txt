@@ -1,3 +1,6 @@
+
+
+
 This is an open source viewer/editor for various databases (DB2, Postgres, SqlServer), runing on both Linux and Windows.
 Go to www.leipelt.net for precompiled/ready-to-run versions
 
