@@ -148,8 +148,7 @@ ExportBox::ExportBox(DSQLPlugin* pDSQL, QWidget *parent, GString *prevDir)
     m_pMainGrid->addWidget(ok, 5, 0);
     m_pMainGrid->addWidget(cancel, 5, 3);
 
-    m_iFullSelectLobCount = 0;
-    m_iCurrentSelectLobCount = 0;
+    m_iLobCount = 0;
 
 
 	/*************** ugly.
@@ -202,8 +201,8 @@ ExportBox::ExportBox(DSQLPlugin* pDSQL, QWidget *parent, GString *prevDir)
 	timer = new QTimer( this );
     CON_SET conSet;
     m_pIDSQL->currentConnectionValues(&conSet);
-    m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_EXPORT, &conSet);
-	connect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );	
+    m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_EXPORT, &conSet, m_pIDSQL);
+	connect( timer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );	
 
 }
 ExportBox::~ExportBox()
@@ -292,34 +291,35 @@ void ExportBox::setSelect(GString sel, GString table)
     DSQLPlugin* pDSQL  = new DSQLPlugin(*m_pIDSQL);
     pDSQL->initAll("SELECT * FROM "+iTableName, 1);
 
-    m_iCurrentSelectLobCount = 0;
+    m_iLobCount = 0;
 
     //Number of LOB files to remain below 4GB per file
-    m_iCurrentSelectLobFiles = 1;
+    m_iLobFilesCount = 1;
 
     pDSQL->initAll(sel, 1);
     for( i=1; i<=pDSQL->numberOfColumns(); ++i)
     {
         if( (pDSQL->sqlType(i) >= 404 && pDSQL->sqlType(i) <= 413) ||
                 (pDSQL->sqlType(i) >= 916 && pDSQL->sqlType(i) <= 970 ) ||
-                pDSQL->isLOBCol(i ))
+                pDSQL->isLOBCol(i) || pDSQL->simpleColType(i) == CT_CLOB)
         {
-            m_iCurrentSelectLobCount++;
+            m_iLobCount++;
         }
     }
-    if( m_iCurrentSelectLobCount > 0 ) m_iCurrentSelectLobFiles = getNumberOfLobFiles(pDSQL, sel);
+    if( m_iLobCount > 0 ) m_iLobCount = getNumberOfLobFiles(pDSQL, sel);
     delete pDSQL;
     modeClicked();
 }
 
 int ExportBox::getNumberOfLobFiles(DSQLPlugin * pDSQL,GString selectStmt)
 {
+    if( pDSQL->getDBTypeName() == _POSTGRES ) return 1;
     GString getSumOfCols;
     for(int i=1; i<= (int)pDSQL->numberOfColumns(); ++i)
     {
         if( (pDSQL->sqlType(i) >= 404 && pDSQL->sqlType(i) <= 413) ||
                 (pDSQL->sqlType(i) >= 916 && pDSQL->sqlType(i) <= 970 ) ||
-                pDSQL->isLOBCol(i))
+                 pDSQL->isLOBCol(i) || pDSQL->simpleColType(i) == CT_CLOB )
         {
             getSumOfCols += "sum(BIGINT(length("+pDSQL->hostVariable(i)+")))+";
         }
@@ -331,8 +331,7 @@ int ExportBox::getNumberOfLobFiles(DSQLPlugin * pDSQL,GString selectStmt)
 
 void ExportBox::modeClicked()
 {
-    if( m_iCurrentSelectLobCount > 0 && selRB->isChecked() ) exportLobCB->setEnabled(true);
-    else if( m_iFullSelectLobCount  > 0 && allRB->isChecked() ) exportLobCB->setEnabled(true);
+    if( m_iLobCount > 0 ) exportLobCB->setEnabled(true);
     else
     {
         exportLobCB->setChecked(false);
@@ -407,7 +406,7 @@ void ExportBox::callExport()
 	*/
 }
 
-void ExportBox::timerEvent()
+void ExportBox::versionCheckTimerEvent()
 {
 	if( !aThread ) return;
     if( !aThread->isAlive() )
@@ -425,8 +424,7 @@ void ExportBox::ExportThread::run()
 void ExportBox::askLobExport()
 {
 
-    if( allRB->isChecked() && m_iFullSelectLobCount == 0 ) return;
-    if( selRB->isChecked() && m_iCurrentSelectLobCount == 0 ) return;
+    if( m_iLobCount == 0 ) return;
 
     GString msg = "There are LOBs present. Do you want to export them too?";
 
@@ -443,13 +441,9 @@ void ExportBox::askLobExport()
         {
             int pathCount = m_pExpImpOptions->getFieldValue(ExpImpOptions::TYP_LOB, "filecount").asInt();
             int recommendedCount = 1;
-            if( allRB->isChecked() && pathCount < m_iFullSelectLobFiles )
+            if( pathCount < m_iLobFilesCount )
             {
-                recommendedCount = m_iFullSelectLobFiles;
-            }
-            if( selRB->isChecked() && pathCount < m_iCurrentSelectLobFiles )
-            {
-                recommendedCount = m_iCurrentSelectLobFiles;
+                recommendedCount = m_iLobFilesCount;
             }
             msg = "To keep the exported LOB files below 4GB a PathCount of "+GString(recommendedCount)+" is recommended.";
             msg +="\nWould you like to use this value?";
@@ -503,7 +497,7 @@ void ExportBox::startExport()
 	else selCmd = "SELECT * FROM "+iTableName;
 	
     DSQLPlugin *pDSQL = new DSQLPlugin(*m_pIDSQL);
-    pDSQL->initAll(selCmd, 0, 1);
+    //pDSQL->initAll(selCmd, 0, 1);
 	
 	GString fullPath = GString(fileNameLE->text());
 	
@@ -577,10 +571,12 @@ void ExportBox::startExport()
         int header = m_pExpImpOptions->getCheckBoxValue(ExpImpOptions::TYP_CSV, "Header");
         int byteaAsFile = m_pExpImpOptions->getCheckBoxValue(ExpImpOptions::TYP_CSV, "ByteaFiles");
         int xmlAsFile = m_pExpImpOptions->getCheckBoxValue(ExpImpOptions::TYP_CSV, "XmlFiles");
+        int lineBreak = m_pExpImpOptions->getCheckBoxValue(ExpImpOptions::TYP_CSV, "Linebreak");
+        //GString codePage = m_pExpImpOptions->getFieldValue(ExpImpOptions::TYP_CSV, "Codepage");
+        GString encoding = m_pExpImpOptions->getComboBoxValue(ExpImpOptions::TYP_CSV, "Encoding");
         if( !delim.strip().length() ) delim = "|";
 
         unsigned int i, j;
-        GFile gf(path+file, 3);        
         GKeyVal keyValSeq;
         keyValSeq.add("EXPORT_TO_CSV", "");
         keyValSeq.add("SQLCMD", selCmd);
@@ -589,11 +585,20 @@ void ExportBox::startExport()
         keyValSeq.add("WRITE_HEADER", GString(header));
         keyValSeq.add("BYTEA_AS_FILE", GString(byteaAsFile));
         keyValSeq.add("XML_AS_FILE", GString(xmlAsFile));
+        keyValSeq.add("LINEBREAK", GString(lineBreak));
+        keyValSeq.add("CODEPAGE", GString(encoding));
         if( exportLobCB->isChecked()  )keyValSeq.add("EXPORT_LOBS", "1");
         else keyValSeq.add("EXPORT_LOBS", "0");
 
 
-        pDSQL->allPurposeFunction(&keyValSeq);
+        GString err = pDSQL->allPurposeFunction(&keyValSeq);
+        if( err.length() ) m_gstrExpErr = err;
+//        if( codePage.strip().length() )
+//        {
+//            Helper::convertFileToCodePage(path+file, path+file+"."+codePage, codePage);
+//            rename(path+file+"."+codePage, path+file);
+//        }
+
         /*
 
         selCmd = createExportSelectForPgsql(selCmd);
@@ -638,8 +643,7 @@ void ExportBox::startExport()
         long count = pDSQL->rowElement(1,1).asLong();
 		count = count / 1000 + 1;
 
-        if( allRB->isChecked() )count *= m_iFullSelectLobCount;
-        else if( selRB->isChecked() )count *= m_iCurrentSelectLobCount;
+        count *= m_iLobCount;
 
         modififier = m_pExpImpOptions->createModifiedString(ExpImpOptions::TYP_LOB) + " "+ modififier;
         int pathCount = m_pExpImpOptions->getFieldValue(ExpImpOptions::TYP_LOB, "filecount").asInt();

@@ -24,9 +24,10 @@
 #ifndef _reorgAll_
 #include "reorgAll.h"
 #endif
-TableSize::TableSize(DSQLPlugin* pDSQL, QWidget *parent, GString currentSchema, int hideSysTabs )
+TableSize::TableSize(GDebug *pGDeb, DSQLPlugin* pDSQL, QWidget *parent, GString currentSchema, int hideSysTabs )
   :QDialog(parent) //, f("Charter", 48, QFont::Bold)
 {
+    m_pGDeb = pGDeb;
     m_pDSQL = new DSQLPlugin(*pDSQL);
 	this->resize(680, 400);
 	QGridLayout * grid = new QGridLayout(this);
@@ -54,6 +55,7 @@ TableSize::TableSize(DSQLPlugin* pDSQL, QWidget *parent, GString currentSchema, 
 	grid->addWidget(ok, 3, 2);
 	
     m_iHideSysTabs = hideSysTabs;
+    deb(__FUNCTION__, "calling fill");
     schemaCB->fill(pDSQL, currentSchema, hideSysTabs);
 	connect(schemaCB, SIGNAL(activated(int)), SLOT(schemaSelected(int)));	
     connect((QWidget*)mainLV->horizontalHeader(), SIGNAL(sectionClicked(int)), this, SLOT(sortClicked(int)));
@@ -184,3 +186,7 @@ void TableSize::sortClicked(int)
     Helper::setVHeader(mainLV);
 }
 
+void TableSize::deb(GString fnName, GString txt)
+{
+    if( m_pGDeb ) m_pGDeb->debugMsg("tabEdit", 1, "::"+fnName+" "+txt);
+}

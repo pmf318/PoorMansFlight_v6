@@ -27,6 +27,10 @@
 
 CatalogDB::CatalogDB(DSQLPlugin* pDSQL, QWidget * parent)  :QDialog(parent)
 {
+    m_pDSQL = pDSQL;
+    m_pParent = parent;
+    m_iMode = CATDB_MODE_NORM;
+    /*
     qApp->installEventFilter(this);
     if( !pDSQL ) _dbTypeName = _DB2;
     else _dbTypeName = pDSQL->getDBTypeName();
@@ -126,9 +130,126 @@ CatalogDB::CatalogDB(DSQLPlugin* pDSQL, QWidget * parent)  :QDialog(parent)
 
     connect(useExistingRB, SIGNAL(clicked()), SLOT(selectionToggled()));
     connect(createNewRB, SIGNAL(clicked()), SLOT(selectionToggled()));
-    fillAllFields();    
+    fillAllFields();
+*/
 }
 
+void CatalogDB::createDisplay(int mode)
+{
+    qApp->installEventFilter(this);
+    if( !m_pDSQL ) _dbTypeName = _DB2;
+    else _dbTypeName = m_pDSQL->getDBTypeName();
+
+    m_iMode = mode;
+
+    m_iCatalogChanged = 0;
+
+    this->resize(400, 200);
+
+    this->setWindowTitle("pmf");
+
+    if( mode == CATDB_MODE_NORM)
+    {
+        okB = new QPushButton(this);
+        okB->setDefault(true);
+        okB->setText("Save");
+        connect(okB, SIGNAL(clicked()), SLOT(OKClicked()));
+        okB->setDefault(true);
+
+        closeB = new QPushButton(this);
+        closeB->setDefault(true);
+        closeB->setText("Exit");
+        connect(closeB, SIGNAL(clicked()), SLOT(closeClicked()));
+    }
+    QGridLayout * mainGrid = new QGridLayout(this);
+
+
+    nameLE     = new QLineEdit(this);
+    hostLE     = new QLineEdit(this);
+    commentLE  = new QLineEdit(this);
+    portLE     = new QLineEdit(this);
+    databaseLE = new QLineEdit(this);
+    aliasLE    = new QLineEdit(this);
+
+    useExistingRB = new QRadioButton("Use existing node", this);
+    createNewRB   = new QRadioButton("Catalog new node", this);
+    nodesCB       = new QComboBox(this);
+    //protocolCB    = new QComboBox(this);
+
+    int row = 0;
+
+    row++;
+    mainGrid->addWidget( new QLabel("Catalog a remote database."), row, 0, 1, 2);
+    row++;
+    mainGrid->addWidget( new QLabel("Create a new node or chose an existing node."), row, 0, 1, 2);
+    //    row++;
+    //    mainGrid->addWidget( new QLabel("Manage entries in 'Menu->Catalog DBs and Nodes'"), row, 0, 1, 2);
+
+    row++;
+    mainGrid->addWidget( new QLabel(""), row, 0, 1, 2);
+
+
+    row++;
+    mainGrid->addWidget(new QLabel("Database:", this), row, 0);
+    mainGrid->addWidget(databaseLE, row, 1, 1, 2);
+
+    row++;
+    mainGrid->addWidget(new QLabel("Alias:", this), row, 0);
+    mainGrid->addWidget(aliasLE, row, 1, 1, 2);
+
+    row++;
+    mainGrid->addWidget(new QLabel(""), row, 0, 1, 2);
+
+    //    row++;
+    //    QLabel *info1 = new QLabel("Chose existing node or create a new node");
+    //    mainGrid->addWidget(info1, row, 0, 1, 2);
+
+    row++;
+    mainGrid->addWidget(useExistingRB, row, 0);
+    row++;
+    mainGrid->addWidget(nodesCB, row, 0, 1, 3);
+
+    row++;
+    mainGrid->addWidget(new QLabel(""), row, 0, 1, 2);
+
+    row++;
+    mainGrid->addWidget(createNewRB, row, 0);
+
+    row++;
+    mainGrid->addWidget(new QLabel("Nodename:", this), row, 0);
+    nameLE->setMaxLength(8);
+    nameLE->setPlaceholderText("max 8 chars");
+    mainGrid->addWidget(nameLE, row, 1, 1, 2);
+
+    row++;
+    mainGrid->addWidget(new QLabel("Host/Server:", this), row, 0);
+    mainGrid->addWidget(hostLE, row, 1, 1, 2);
+
+    row++;
+    mainGrid->addWidget(new QLabel("Comment:", this), row, 0);
+    mainGrid->addWidget(commentLE, row, 1, 1, 2);
+
+    row++;
+    mainGrid->addWidget(new QLabel("Port or Service:", this), row, 0);
+    mainGrid->addWidget(portLE, row, 1, 1, 2);
+
+    if( mode == CATDB_MODE_NORM)
+    {
+        QHBoxLayout *buttonLayout = new QHBoxLayout;
+        QWidget * buttonWdiget = new QWidget();
+        buttonWdiget->setLayout(buttonLayout);
+
+        buttonLayout->addWidget(closeB);
+        buttonLayout->addWidget(okB);
+        row++;
+        mainGrid->addWidget(buttonWdiget, row, 0, 1, 2);
+    }
+
+    connect(useExistingRB, SIGNAL(clicked()), SLOT(selectionToggled()));
+    connect(createNewRB, SIGNAL(clicked()), SLOT(selectionToggled()));
+    fillAllFields();
+
+}
 
 CatalogDB::~CatalogDB()
 {    
@@ -269,7 +390,7 @@ void CatalogDB::keyPressEvent(QKeyEvent *event)
 {    
     if( event->key() == Qt::Key_Escape )
     {
-        close();
+        if( m_iMode == CATDB_MODE_NORM) close();
     }
 }
 

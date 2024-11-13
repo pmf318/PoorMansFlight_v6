@@ -5,6 +5,7 @@
 #include<QSyntaxHighlighter>
 #include <gseq.hpp>
 #include <gstring.hpp>
+#include <pmfdefines.h>
 
 #if QT_VERSION >= 0x060000
 #include <QRegularExpression>
@@ -15,7 +16,7 @@ class SqlHighlighter : public QSyntaxHighlighter
 
 
 public:
-    SqlHighlighter( int colorScheme, QTextDocument *parent = 0, GSeq<GString> *sqlCmdList = NULL, GSeq<GString> *hostVarList = NULL);
+    SqlHighlighter( PmfColorScheme colorScheme, QTextDocument *parent = 0, GSeq<GString> *sqlCmdList = NULL, GSeq<GString> *hostVarList = NULL);
 
 protected:
     void highlightBlock(const QString &text);
@@ -28,7 +29,7 @@ private:
         QRegularExpression pattern;
         QTextCharFormat format;
     };
-    int m_iColorScheme;
+    PmfColorScheme m_iColorScheme;
     QVector<HighlightingRule> highlightingRules;
     QRegularExpression commentStartExpression;
     QRegularExpression commentEndExpression;
@@ -44,7 +45,7 @@ private:
         QRegExp pattern;
         QTextCharFormat format;
     };
-    int m_iColorScheme;
+    PmfColorScheme m_iColorScheme;
     QVector<HighlightingRule> highlightingRules;
     QRegExp commentStartExpression;
     QRegExp commentEndExpression;

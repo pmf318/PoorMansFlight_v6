@@ -105,8 +105,10 @@ SelectEncoding::SelectEncoding(DSQLPlugin* pDSQL, QWidget *parent )
 
 GString SelectEncoding::getCurrentEncoding(GString cmd)
 {
+    m_pDSQL->setCLOBReader(1);
     GString err = m_pDSQL->initAll(cmd);
-    if( err.length()) return "<No Info>";
+    m_pDSQL->setCLOBReader(0);
+    if( err.length()) return "<No Info>";    
     return m_pDSQL->rowElement(1, 1 ).strip('\'');
 }
 
@@ -192,7 +194,7 @@ int SelectEncoding::saveEncoding()
         else if( m_pSaveThisDB )
         {
             if( storeSet.Type == curSet.Type && storeSet.Host == curSet.Host &&
-                storeSet.Port == curSet.Port && storeSet.DB == curSet.DB )
+                storeSet.Port == curSet.Port && storeSet.DB == curSet.DB && storeSet.UID == curSet.UID)
             {
                 return f.replaceAt(i, Helper::connSetToString(&curSet));
             }
@@ -222,7 +224,7 @@ GString SelectEncoding::getEncoding(DSQLPlugin* pDSQL )
         if( Helper::connSetFromString(f.getLine(i), &storeSet) == 0 )
         {
             if( storeSet.Type == curSet.Type && storeSet.Host == curSet.Host &&
-                storeSet.Port == curSet.Port && storeSet.DB == curSet.DB )
+                storeSet.Port == curSet.Port && storeSet.DB == curSet.DB  && storeSet.UID == curSet.UID  )
             {
                 return storeSet.CltEnc;
             }

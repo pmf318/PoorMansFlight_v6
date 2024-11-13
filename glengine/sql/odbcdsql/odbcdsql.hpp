@@ -205,7 +205,7 @@
 	  void errorState(SQLHSTMT hstmt);
 
 
-       GString readRowData(GString message, unsigned long maxRows = 0, int getLen = 0, int getFullXML = 0);
+       GString readRowData(GString message, long maxRows = -1, int getLen = 0, int getFullXML = 0);
        //GString fillIndexViewRawData(GString table);
 	   
        //New: Keep
@@ -236,7 +236,7 @@
     VCExport GString connect(GString db, GString uid, GString pwd, GString host = "", GString port = "");
     VCExport GString connect(CON_SET * pCs);
 	VCExport int disconnect();
-	VCExport GString initAll(GString message, unsigned long maxRows = 0, int getLen = 0);
+    VCExport GString initAll(GString message, long maxRows = -1, int getLen = 0);
 	VCExport int commit();
 	VCExport int rollback();
     VCExport unsigned int  numberOfColumns();
@@ -365,6 +365,7 @@
     VCExport GString allPurposeFunction(GKeyVal * pKeyVal){ return "";}
     VCExport GString setEncoding(GString encoding);
     VCExport void getAvailableEncodings(GSeq<GString> *encSeq);
+    VCExport GString reconnect(CON_SET *pCS);
   };
 
 #endif

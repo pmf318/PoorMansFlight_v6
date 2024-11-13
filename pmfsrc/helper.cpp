@@ -2,6 +2,7 @@
 #include "helper.h"
 #endif
 
+
 #ifdef MAKE_VC
 #include <windows.h>
 #include <process.h>
@@ -23,6 +24,11 @@
 #include <QDomDocument>
 #include <QHeaderView>
 #include <QDate>
+#include <QProcess>
+#include <QtGlobal>
+#if QT_VERSION > 0x060500
+#include <QStyleHints>
+#endif
 
 #if QT_VERSION >= 0x060000
 #include <QScreen>
@@ -44,7 +50,6 @@
 
 
 #include <gfile.hpp>
-
 
 /***************************************************
  *  On Win7_64 this code crashes:
@@ -428,6 +433,7 @@ GString Helper::pmfNameAndVersion(GString database)
 
 void Helper::setVHeader(QTableWidget * someLV, bool movable)
 {
+    someLV->setUpdatesEnabled(false);
     someLV->setWordWrap(false);
 #if QT_VERSION >= 0x050000
     someLV->horizontalHeader()->setSectionsMovable(movable);
@@ -448,6 +454,7 @@ void Helper::setVHeader(QTableWidget * someLV, bool movable)
 //        someLV->resizeColumnToContents ( i );
 //        if( someLV->columnWidth(i) > 200 ) someLV->setColumnWidth(i, 200);
 //    }
+    someLV->setUpdatesEnabled(true);
 }
 
 void Helper::setLastSelectedPath(GString className, GString path)
@@ -577,7 +584,7 @@ GString Helper::formatItemText(DSQLPlugin * pDSQL, QTableWidgetItem * pItem)
     }
     if( text.subString(1, 6) == "@DSQL@" ) return text;
     if( Helper::isSystemString(text)) return text;
-    if( pDSQL->isNumType(colNr) || GString(text).upperCase() == "NULL") return text;
+    if( pDSQL->isForBitCol(colNr) ||  pDSQL->isNumType(colNr) || GString(text).upperCase() == "NULL") return text;
     if( pDSQL->isDateTime(colNr) )
     {
         if( GString(text).upperCase().occurrencesOf("CURRENT") ) return text;
@@ -624,11 +631,11 @@ GString Helper::handleGuid(DSQLPlugin *pDSQL,  GString in, int convertGuid)
         return "'"+in+"'";
     }
     //DB2:
-    //Seems ok as it is (DB2 <-> DB2)
+    //Seems ok as it is (DB2 <-> DB2)    
     if( in.indexOf('x') == 1 ) return in;
     in = in.strip().strip("'");
     if( convertGuid ) in = Helper::convertGuid(in);
-    return "x'" + in + "'";
+    return "x'" + in.upperCase() + "'";
 }
 
 GString Helper::convertGuid(GString in)
@@ -704,7 +711,7 @@ void Helper::setGeometry(QDialog *qd, GString key)
 
 GString Helper::connSetToString(CON_SET * pCS)
 {
-    return pCS->Type + _PMF_PASTE_SEP + pCS->Host+ _PMF_PASTE_SEP + pCS->Port + _PMF_PASTE_SEP + pCS->DB + _PMF_PASTE_SEP + pCS->CltEnc;
+    return pCS->Type + _PMF_PASTE_SEP + pCS->Host+ _PMF_PASTE_SEP + pCS->Port + _PMF_PASTE_SEP + pCS->DB + _PMF_PASTE_SEP + pCS->CltEnc + _PMF_PASTE_SEP + pCS->UID;
 }
 
 int Helper::connSetFromString(GString txt, CON_SET * pCS)
@@ -717,6 +724,7 @@ int Helper::connSetFromString(GString txt, CON_SET * pCS)
         pCS->Port = "";
         pCS->DB = "";
         pCS->CltEnc = "";
+        pCS->UID = "";
         return 1;
     }
     pCS->Type = csSeq.elementAtPosition(1);
@@ -724,5 +732,227 @@ int Helper::connSetFromString(GString txt, CON_SET * pCS)
     pCS->Port = csSeq.elementAtPosition(3);
     pCS->DB = csSeq.elementAtPosition(4);
     pCS->CltEnc = csSeq.elementAtPosition(5);
+    if( csSeq.numberOfElements() > 5 ) pCS->UID = csSeq.elementAtPosition(6);
     return 0;
 }
+
+
+int Helper::runCommandInProcess(GString cmd, GString &res, GString &err)
+{
+	cmd = cmd.strip();
+	printf("cmd: %s\n", (char*) cmd);
+    QProcess process;	
+
+    process.start(cmd);
+    bool finishedOK = process.waitForFinished(-1); // will wait forever until finished
+
+	if( finishedOK ) printf("runStuffInProcess, finished OK\n");
+	else printf("runStuffInProcess, finished not OK\n");
+	process.setProcessChannelMode(QProcess::MergedChannels);
+    QString st_out = process.readAllStandardOutput();
+    QString st_err = process.readAllStandardError();
+    res = GString(st_out).strip();
+	if( !finishedOK ) err = GString(process.errorString()) + " " +GString(st_err).strip();
+	
+    return finishedOK ? 0 :1;
+}
+
+int Helper::runStuffInProcess(GString cmd, GString &res, GString &err)
+{
+	QStringList qList;
+	cmd = cmd.strip();
+	GSeq<GString> argList = cmd.split(' ');
+	if( argList.numberOfElements() == 0 ) 
+	{
+		res = "";
+		err = "No cmd given: Nothing to do.";
+		return 1;
+	}
+	cmd = argList.elementAtPosition(1);
+	printf("cmd: %s\n", (char*) cmd);
+	for( int i = 2; i <= argList.numberOfElements(); ++i )
+	{
+		qList.append(argList.elementAtPosition(i));
+	}	
+    QProcess process;	
+    process.start(cmd, qList);
+    bool finishedOK = process.waitForFinished(-1); // will wait forever until finished
+
+	if( finishedOK ) printf("runStuffInProcess, finished OK\n");
+	else printf("runStuffInProcess, finished not OK\n");
+	process.setProcessChannelMode(QProcess::MergedChannels);
+    QString st_out = process.readAllStandardOutput();
+    QString st_err = process.readAllStandardError();
+    res = GString(st_out).strip();
+	if( !finishedOK ) err = GString(process.errorString()) + " " +GString(st_err).strip();
+	
+    return finishedOK ? 0 :1;
+}
+
+bool Helper::isSystemDarkPalette()
+{    
+//0x060500 is equivalent to v6.5.00
+#if QT_VERSION < 0x060500
+	printf("Helper::isSystemDarkPalette: Qt version too low, returning false\n");
+    return false;
+#endif
+
+	QSettings regSet("HKEY_CURRENT_USER\\Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",QSettings::NativeFormat);
+	GString val = regSet.value("AppsUseLightTheme").toString();
+	printf("Helper::isSystemDarkPalette: Mode from registry: %s\n", (char*) val);
+	
+#if QT_VERSION < 0x060800
+	//User wants lightMode:
+    QSettings settings(_CFG_DIR, "pmf6");
+    GString prevStyle = settings.value("style", "").toString();
+	if( prevStyle.length() && !prevStyle.occurrencesOf(_DARK_THEME) ) return false;
+#endif	
+	
+#if QT_VERSION > 0x060500
+    QStyleHints *styleHints = QGuiApplication::styleHints();
+    printf("Helper::isSystemDarkPalette: Checking styleHints...\n");
+	if( styleHints->colorScheme() == Qt::ColorScheme::Light ) 
+	{
+		printf("Helper::isSystemDarkPalette: is light\n");
+		return false;		
+	}
+	else if( styleHints->colorScheme() == Qt::ColorScheme::Dark )
+	{
+		printf("Helper::isSystemDarkPalette: is dark\n");
+		return true;
+	}	
+	else if( styleHints->colorScheme() == Qt::ColorScheme::Unknown ) printf("Helper::isSystemDarkPalette: is Unknown\n");
+	else printf("Helper::isSystemDarkPalette: is not set\n");
+	printf("Helper::isSystemDarkPalette: Checking styleHints...done.\n");
+#endif
+	
+	
+	const QPalette defaultPalette;
+	int ltText = defaultPalette.color(QPalette::WindowText).lightness();
+	int ltWin  = defaultPalette.color(QPalette::Window).lightness();
+	printf("Helper::isSystemDarkPalette: lightness text: %i, lightness Window: %i\n", ltText, ltWin);
+    
+    bool isDark = defaultPalette.color(QPalette::WindowText).lightness() > defaultPalette.color(QPalette::Window).lightness();
+    if( isDark ) printf("Helper::isSystemDarkPalette: Appears to be darkMode\n");
+    else printf("Helper::isSystemDarkPalette: Appears to be lightMode\n");
+    return isDark;
+}
+
+GString Helper::getSensibleStyle()
+{
+	
+    QSettings settings(_CFG_DIR, "pmf6");
+    GString prevStyle = settings.value("style", "").toString();
+	printf("Helper::getSensibleStyle(): prevStyle from settings: %s\n", (char*) prevStyle);
+	if( Helper::isSystemDarkPalette() ) printf("Helper::getSensibleStyle(): OS is in DarkMode\n");
+    else printf("Helper::getSensibleStyle(): OS is in LightMode\n");
+
+
+	
+    //We do not use darkMode in Qt versions below 6.5.0
+    #if QT_VERSION < 0x060500
+        if( prevStyle.occurrencesOf(_DARK_THEME) ) return "Fusion";
+    #endif
+	//In Qt 6.8.0 there is no way to enforce lightMode if OS is in darkMode
+    #if QT_VERSION >= 0x060800		
+		printf("Helper::getSensibleStyle, we are on 6.8.0++\n");
+		if( Helper::isSystemDarkPalette() ) 
+		{
+			printf("Helper::getSensibleStyle, we are on 6.8.0++ and OS is darkMode. Returning dark style.\n");
+			if( prevStyle.occurrencesOf(_DARK_THEME) ) return prevStyle;
+			else return "Fusion" + _DARK_THEME;
+		}
+	#endif 
+
+
+    //first install
+    if( !prevStyle.length() )
+    {
+		printf("Helper::getSensibleStyle, no prevStyle\n");
+        if( Helper::isSystemDarkPalette() ) 
+		{
+			printf("Helper::getSensibleStyle(), no prev. style, and DarkMode, returning Fusion dark\n");
+			return "Fusion" + _DARK_THEME;
+		}
+        else
+        {
+#ifdef MAKE_VC
+			printf("Helper::getSensibleStyle, disabling darkMode\n");
+            qputenv("QT_QPA_PLATFORM", "windows:darkmode=0");
+#endif
+			printf("Helper::getSensibleStyle(), no prev. style, and LightMode, returning Fusion\n");
+            return "Fusion";
+        }
+    }
+
+    //Disable DarkMode completely if:
+    // -user has explicitly set a non-dark style
+    if( !prevStyle.occurrencesOf(_DARK_THEME) )
+    {
+        
+#ifdef MAKE_VC
+		printf("Helper::getSensibleStyle(), prev. style is LightMode, disabling darkmode\n");
+        qputenv("QT_QPA_PLATFORM", "windows:darkmode=0");
+		//QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
+		//qApp->setPalette(qApp->style()->standardPalette());
+#endif
+		printf("Helper::getSensibleStyle(), prev. style is LightMode, returning prevStyle\n");
+        return prevStyle;
+    }
+    else if( prevStyle.occurrencesOf(_DARK_THEME) )
+    {
+        if( !Helper::isSystemDarkPalette() ) 
+		{			
+#ifdef MAKE_VC
+			qputenv("QT_QPA_PLATFORM", "windows:darkmode=0");
+			//QGuiApplication::styleHints()->setColorScheme(Qt::ColorScheme::Light);
+			//qApp->setPalette(qApp->style()->standardPalette());
+#endif	
+			printf("Helper::getSensibleStyle(), prev. style is DarkMode, but OS is LightMode, forcing lightMode and returning Fusion\n");
+			return "Fusion";
+		}
+    }
+	printf("Helper::getSensibleStyle(), final, returning %s\n", (char*) prevStyle);
+    return prevStyle;
+}
+
+/*
+int Helper::convertFileToCodePage(GString inFile, GString outFile, GString codec)
+{
+
+//    for(auto codecstr: QTextCodec::availableCodecs())
+//    {
+//        printf("Codec: %s\n", (char*) GString(codecstr.data()));
+//    }
+    QFile fileIn(inFile);
+    if (!fileIn.open(QIODevice::ReadOnly))
+    {
+        return -1;
+    }
+    QFile fileOut(outFile);
+    if (!fileOut.open(QIODevice::WriteOnly | QIODevice::Text))
+    {
+        return -2;
+    }
+    QTextStream streamFileOut(&fileOut);
+    streamFileOut.setCodec((char*)codec);
+    char cr = 13;
+    char lf = 10;
+
+    QTextStream in(&fileIn);
+    while (!in.atEnd())
+    {
+        QString line = in.readLine();
+#ifdef MAKE_VC
+        streamFileOut << line+cr;
+        streamFileOut << line+lf;
+#else
+        streamFileOut << line+"\n";
+#endif
+        streamFileOut.flush();
+    }
+    fileIn.close();
+    fileOut.close();
+    return 0;
+}
+*/

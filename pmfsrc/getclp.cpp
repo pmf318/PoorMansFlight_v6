@@ -180,41 +180,41 @@ int Getclp::saveAsPlainText(GString fileName, int overwrite)
 
     GFile gf(GString(fileName), 2);
 
-    gf.writeToNewLine("-- File created by Poor Man's Flight");
-    gf.writeToNewLine("--");
+    gf.addLineForOS   ("-- File created by Poor Man's Flight");
+    gf.addLineForOS("--");
 
     if( m_pDSQL->getDBType() == DB2 || m_pDSQL->getDBType() == DB2ODBC )
     {
-        gf.writeToNewLine("-- To create the table below, open a DB2 CLP (CommandLineProcessor),");
-        gf.writeToNewLine("-- connect to the database, and execute:");
-        gf.writeToNewLine("-- db2 -tvf <name of this file> (and don't forget to commit)");
-        gf.writeToNewLine("-- ");
+        gf.addLineForOS("-- To create the table below, open a DB2 CLP (CommandLineProcessor),");
+        gf.addLineForOS("-- connect to the database, and execute:");
+        gf.addLineForOS("-- db2 -tvf <name of this file> (and don't forget to commit)");
+        gf.addLineForOS("-- ");
     }
-    gf.writeToNewLine("-- WARNING: BEFORE CREATING THE TABLE, VERIFY THE SETTINGS BELOW.");
-    gf.writeToNewLine("-- For example, if you use IDENTTY columns, verify that START and INCREMENT are OK");
-    gf.writeToNewLine("-- (PMF will not set these for you).");
-    gf.writeToNewLine("-- Also, make sure that the table gets created in the correct tablespace");
-    gf.writeToNewLine("-- by adding the appropriate CREATE ... IN <tablespace> statement.");
-    gf.writeToNewLine("-- The same goes for INDEX IN <tablespace>.");
-    gf.writeToNewLine("-- You might also want to add something like GRANT SELECT ON <table> TO...");
-    gf.writeToNewLine("-- ");
+    gf.addLineForOS("-- WARNING: BEFORE CREATING THE TABLE, VERIFY THE SETTINGS BELOW.");
+    gf.addLineForOS("-- For example, if you use IDENTTY columns, verify that START and INCREMENT are OK");
+    gf.addLineForOS("-- (PMF will not set these for you).");
+    gf.addLineForOS("-- Also, make sure that the table gets created in the correct tablespace");
+    gf.addLineForOS("-- by adding the appropriate CREATE ... IN <tablespace> statement.");
+    gf.addLineForOS("-- The same goes for INDEX IN <tablespace>.");
+    gf.addLineForOS("-- You might also want to add something like GRANT SELECT ON <table> TO...");
+    gf.addLineForOS("-- ");
 
 
     TABLE_PROPS tabProps = m_pDSQL->getTableProps(iTableName);
     if( tabProps.TableType == TYPE_TYPED_VIEW || tabProps.TableType == TYPE_UNTYPED_VIEW )
     {
-        gf.writeToNewLine("-- Uncomment the next line to drop the view first:");
-        gf.writeToNewLine("-- DROP VIEW  "+iTableName);
+        gf.addLineForOS("-- Uncomment the next line to drop the view first:");
+        gf.addLineForOS("-- DROP VIEW  "+iTableName);
     }
     if( tabProps.TableType == TYPE_TYPED_TABLE || tabProps.TableType == TYPE_UNTYPED_TABLE )
     {
-        gf.writeToNewLine("-- Uncomment the next line to drop the table first:");
-        gf.writeToNewLine("-- DROP TABLE "+iTableName);
+        gf.addLineForOS("-- Uncomment the next line to drop the table first:");
+        gf.addLineForOS("-- DROP TABLE "+iTableName);
     }
-    gf.writeToNewLine("");
+    gf.addLineForOS("");
 
 
-    gf.writeToNewLine(mainEditor->document()->toPlainText());
+    gf.addLineForOS(mainEditor->document()->toPlainText());
     return 0;
 }
 

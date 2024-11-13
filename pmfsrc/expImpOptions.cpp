@@ -15,6 +15,7 @@
 #include <gfile.hpp>
 #include <gstuff.hpp>
 #include <QGroupBox>
+#include <QComboBox>
 #include <QDialogButtonBox>
 #include <QLineEdit>
 
@@ -22,12 +23,13 @@
 #define ROW_CHECKBOX 1
 #define ROW_LINEEDIT 2
 #define ROW_COMMENT 3
+#define ROW_COMBOBOX 4
 
 
 
 
 
-ExpImpOptions::ExpImpOptions(QWidget *parent, Mode mode, CON_SET *pCS) :QDialog(parent)
+ExpImpOptions::ExpImpOptions(QWidget *parent, Mode mode, CON_SET *pCS, DSQLPlugin* pDSQL) :QDialog(parent)
 {
     this->resize(480,180);
     this->setWindowTitle("Additional options");
@@ -35,6 +37,7 @@ ExpImpOptions::ExpImpOptions(QWidget *parent, Mode mode, CON_SET *pCS) :QDialog(
     GString dbName = pCS->DB;
 
     m_mainWdgt = new QTabWidget(this);
+    m_pDSQL = pDSQL;
     QGridLayout * mainGrid = new QGridLayout(this);
 
 
@@ -164,7 +167,15 @@ void ExpImpOptions::createEntries(Mode mode)
         createRow( TYP_CSV, "XmlFiles", ROW_CHECKBOX, "1", "Write xml data into seperate files. Default: Yes");
         createRow( TYP_CSV, "(Note: XML will lose its formatting when 'XmlFiles' is set to 'No')");
         createRow( TYP_CSV, "");
-
+        GSeq <GString> aSeq;
+        m_pDSQL->getAvailableEncodings(&aSeq);
+#ifdef MAKE_VC
+        createRow( TYP_CSV, "Encoding", ROW_COMBOBOX, "UTF8", &aSeq, "default: WIN1252");
+#else
+        createRow( TYP_CSV, "Encoding", ROW_COMBOBOX, "UTF8", &aSeq, "default: UTF8");
+#endif
+        createRow( TYP_CSV, "Linebreak", ROW_CHECKBOX, "1", "OS-specific CR/LF or LF. Default: Yes");
+        createRow( TYP_CSV, "");
     }
     else if( mode == MODE_IMPORT)
     {
@@ -209,6 +220,7 @@ void ExpImpOptions::createEntries(Mode mode)
         createRow( TYP_IXF, "forcein", ROW_CHECKBOX, "", "Accept data despite code page mismatches, suppress translation between code pages, default: NOT SET");
         createRow( TYP_IXF, "nochecklengths", ROW_CHECKBOX, "", "Attempt import without length check, default: NOT SET");
         createRow( TYP_IXF, "indexixf", ROW_CHECKBOX, "", "Drop all indexes and recreate from IXF, default: NOT SET");
+
 
         createRow( TYP_CSV, "Delimiter", ROW_LINEEDIT, "", "default: '|'", 0);        
         createRow( TYP_CSV, "CommitCount", ROW_LINEEDIT, "", "Commit after n INSERTs, default: 0 (commit every insert)", 0);
@@ -322,6 +334,26 @@ void ExpImpOptions::createRow(int mode, GString title, int type, GString default
         pLE->setText(defaultValue);
         pRow->OldValue = defaultValue;
         pRow->TheWdgt = pLE;
+    }
+    m_rowsSeq.add(pRow);
+}
+
+void ExpImpOptions::createRow(int mode, GString title, int type, GString defaultValue, GSeq<GString> * pSeq, GString text)
+{
+    OPTIONSROW * pRow = new OPTIONSROW;
+    pRow->WdgType = type;
+    pRow->FileType = mode;
+    pRow->DefaultValue = defaultValue;
+    pRow->DefaultText = text;
+    pRow->Title = title;
+    pRow->PmfInternal = 0;
+    if( type == ROW_COMBOBOX )
+    {
+        QComboBox * qCB = new QComboBox();
+        pRow->TheWdgt = qCB;
+        for(int i = 1; i <= pSeq->numberOfElements(); ++i )qCB->addItem(pSeq->elementAtPosition(i));
+        int idx = qCB->findText(defaultValue);
+        if( idx >= 0 ) qCB->setCurrentIndex(idx);
     }
     m_rowsSeq.add(pRow);
 }
@@ -555,6 +587,17 @@ int ExpImpOptions::getCheckBoxValue(FileType type, GString fieldName)
     }
     return 0;
 }
+
+GString ExpImpOptions::getComboBoxValue(FileType type, GString fieldName)
+{
+    OPTIONSROW * pRow = getOptionsRow(type, fieldName);
+    if( pRow != NULL )
+    {
+        return ((QComboBox*) pRow->TheWdgt)->currentText();
+    }
+    return "";
+}
+
 
 int ExpImpOptions::setCheckBoxValue(FileType type, GString fieldName, int checked)
 {

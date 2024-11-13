@@ -263,9 +263,9 @@ int ExtSQL::keepTerminationCharacter(GString cmd)
 }
 
 
-void ExtSQL::createCommandsForTerminator()
+void ExtSQL::createCommandsForTerminator(GString termChar)
 {
-    GString termChar = pStTermLE->text();
+    if( termChar == ";" ) return createCommands();
 
     deb("->TermChar was changed, running createCommandsForTerminator()");
     readAllLines(termChar);
@@ -279,7 +279,7 @@ void ExtSQL::createCommandsForTerminator()
         if( !line.strip().length() ) continue;
         deb("Word: "+m_seqAllWords.elementAtPosition(i));
         cmd += " "+line;
-        if(line.occurrencesOf(termChar) )
+        if(line.occurrencesOf(termChar) && termChar.length() )
         {
             if( cmd.strip().length() )
             {
@@ -371,12 +371,29 @@ GString ExtSQL::helpTerminatorClicked()
     return txt;
 }
 
+int ExtSQL::isDollarQuoted()
+{
+    if( m_pDSQL->getDBTypeName() == _POSTGRES )
+    {
+        GString stmt = GString(editor->toPlainText()).upperCase();
+        if( stmt.occurrencesOf("LANGUAGE") && stmt.occurrencesOf("PLPGSQL") && stmt.occurrencesOf(" $") && stmt.occurrencesOf("$ ") )
+        {
+            GString txt = "This appears to be a 'dollar quoted' command. Is that correct?\n(If 'Yes', the statement terminator will be ignored)";
+            if( QMessageBox::question(this, "PMF", txt,  QMessageBox::Yes|QMessageBox::No) == QMessageBox::Yes) return 1;
+            return 0;
+        }
+    }
+    return 0;
+}
+
 void ExtSQL::runClicked()
 {
+    if( isDollarQuoted() ) createCommandsForTerminator();
+    else createCommandsForTerminator(pStTermLE->text());
     infoText(green, "Running, please wait...");
-    if( GString(pStTermLE->text()) != GString(";") ) createCommandsForTerminator();
-    else createCommands();
+
     m_Master->setExtSqlCmd(editor->toPlainText());
+
     int errCount = 0;
     for(int i = 1; i <= (int)m_seqAllCmds.numberOfElements(); ++i)
     {

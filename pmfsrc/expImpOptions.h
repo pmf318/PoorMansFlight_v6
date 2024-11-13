@@ -63,7 +63,7 @@ class ExpImpOptions : public QDialog
 
 	Q_OBJECT
 	public:
-        ExpImpOptions(QWidget *parent, Mode mode, CON_SET *pCS);
+        ExpImpOptions(QWidget *parent, Mode mode, CON_SET *pCS, DSQLPlugin* pDSQL);
         ~ExpImpOptions();
         GString modifiedString();
         void createEntries(Mode mode);
@@ -72,6 +72,7 @@ class ExpImpOptions : public QDialog
         int setFieldValue(FileType type, GString fieldName, GString data);
         GString getFieldValue(FileType type, GString fieldName);
         int getCheckBoxValue(FileType type, GString fieldName);
+        GString getComboBoxValue(FileType type, GString fieldName);
         int setCheckBoxValue(FileType type, GString fieldName, int checked);
         void setRowsToDefault();
         int settingsChanged();
@@ -86,6 +87,7 @@ class ExpImpOptions : public QDialog
 		
 	private:
         QTabWidget * m_mainWdgt;
+        DSQLPlugin* m_pDSQL;
 		QFont f;
 		QPushButton * ok, * cancel, *getFileB;
         GString m_gstrModified;
@@ -94,6 +96,8 @@ class ExpImpOptions : public QDialog
         void displayRow(OPTIONSROW * pRow, QGridLayout *pGrid, int row );
 
         void createRow(int mod, GString title, int type, GString defaultValue, GString defaultText, int maxLen = 1, int pmfInternal = 0);
+        void createRow(int mod, GString title, int type, GString defaultValue, GSeq<GString> * pSeq, GString text);
+
         void createRow(int mod, GString text);
         void createTab( GString tabTitle, FileType fileType);
         GString optionsrowToString(OPTIONSROW * pRow);

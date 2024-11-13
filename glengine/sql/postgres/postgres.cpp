@@ -19,6 +19,7 @@
 #include <gstuff.hpp>
 
 
+
 #include <fstream>
 #include "pmf_pgsql_def.hpp"
 #ifdef MAKE_VC
@@ -33,6 +34,7 @@
 //Global static instance counter.
 //Each instance saves its private instance value in m_iMyInstance.
 static int m_postgresobjCounter = 0;
+static int m_postgresConnectionCounter = 0;
 
 #define XML_MAX 250
 
@@ -59,11 +61,11 @@ extern "C" __declspec( dllexport ) postgres* create()
     //printf("Calling postgres creat()\n");
     _flushall();
     return new postgres();
-}	
+}
 extern "C" __declspec( dllexport ) void destroy(postgres* pODBCSQL)
 {
     if( pODBCSQL ) delete pODBCSQL ;
-}	
+}
 #endif
 /***********************************************************
  * CLASS
@@ -71,13 +73,18 @@ extern "C" __declspec( dllexport ) void destroy(postgres* pODBCSQL)
 
 postgres::postgres(postgres  const &o)
 {
-    m_pRes = NULL;
-	m_iLastSqlCode = 0;
     m_postgresobjCounter++;
-    m_iTruncationLimit = 500;
     m_iMyInstance = m_postgresobjCounter;
+
     m_pGDB = o.m_pGDB;
     deb("CopyCtor start");
+    deb("CopyCtor copying from instance ["+GString(o.m_iMyInstance)+"]");
+    m_iNumberOfRows = 0;
+    m_iNumberOfColumns = 0;
+    m_pRes = NULL;
+    m_iLastSqlCode = 0;
+    m_iTruncationLimit = 500;
+
 
     m_odbcDB  = POSTGRES;
     m_iReadUncommitted = o.m_iReadUncommitted;
@@ -87,9 +94,11 @@ postgres::postgres(postgres  const &o)
     m_strHost = o.m_strHost;
     m_strPWD = o.m_strPWD;
     m_strUID = o.m_strUID;
+    m_strOptions = o.m_strOptions;
     m_strPort  = o.m_strPort;
     m_strEncoding = o.m_strEncoding;
-    deb("Copy CTor set encoding: "+m_strEncoding);
+    m_strPwdCmd = o.m_strPwdCmd;
+
     deb("CopyCtor, orgPort: "+GString(o.m_strPort)+", new: "+GString(m_strPort));
     m_iReadClobData = o.m_iReadClobData;
     m_strCurrentDatabase = o.m_strCurrentDatabase;
@@ -100,8 +109,16 @@ postgres::postgres(postgres  const &o)
 
     //m_pgConn = o.m_pgConn;
     deb("CopyCtor: calling connect, connection data: "+m_strDB+", uid: "+m_strUID+", host: "+m_strHost+", port: "+GString(m_strPort));
-    this->connect(m_strDB, m_strUID, m_strPWD, m_strHost, GString(m_strPort));
-    this->setEncoding(m_strEncoding);
+    CON_SET cs;
+    cs.DB = m_strDB;
+    cs.UID = m_strUID;
+    cs.PWD = m_strPWD;
+    cs.Host = m_strHost;
+    cs.Port = m_strPort;
+    cs.Options = m_strOptions;
+    cs.PwdCmd = m_strPwdCmd;
+    this->connectInternal(&cs);
+    deb("Copy CTor set encoding: "+o.m_strEncoding);
     //if( m_strCurrentDatabase.length() ) this->initAll("USE "+m_strCurrentDatabase);
     //!!TODO
 //    if( m_iReadUncommitted ) readRowData("set transaction isolation level read uncommitted");
@@ -112,27 +129,30 @@ postgres::postgres(postgres  const &o)
 postgres::postgres()
 {
     m_postgresobjCounter++;
-    //m_IDSQCounter++;
     m_iTruncationLimit = 500;
     m_iMyInstance = m_postgresobjCounter;
+    m_iNumberOfRows = 0;
+    m_iNumberOfColumns = 0;
 
-	m_iLastSqlCode = 0;
-    m_iIsTransaction = 0;	
+    m_iLastSqlCode = 0;
+    m_iIsTransaction = 0;
     m_odbcDB  = POSTGRES;
 
     m_strDB ="";
     m_strUID ="";
     m_strPWD = "";
     m_strHost = "localhost";
-    m_strPort = 5432;
+    m_strPort = "5432";
     m_strEncoding = "";
+    m_strOptions = "";
+    m_strPwdCmd = "";
 
     m_pGDB = NULL;
     m_strLastSqlSelectCommand = "";
     m_iReadUncommitted = 0;
     m_iReadClobData = 0;
     m_strCurrentDatabase = "";
-    m_pgConn = NULL;    
+    m_pgConn = NULL;
     m_pRes = NULL;
     //printf("postgres[%i]> DefaultCtor done. Port: %i\n", m_iMyInstance, m_iPort );
 }
@@ -153,77 +173,188 @@ postgres::~postgres()
     deb("Dtor done, current count: "+GString(m_postgresobjCounter));
 }
 
+GString postgres::getDBTypeName()
+{
+    return _POSTGRES;
+}
+
 int postgres::getConnData(GString * db, GString *uid, GString *pwd) const
 {
     *db = m_strDB;
     *uid = m_strUID;
     *pwd = m_strPWD;
-	return 0;
+    return 0;
 }
 
 
+
 GString postgres::connect(GString db, GString uid, GString pwd, GString host, GString port)
-{    
+{
     deb("::connect, connect to DB: "+db+", uid: "+uid+", host: "+host+", port: "+port);
-
-    if( !port.length() || port == "0") port = "5432";
-    m_strDB = db;
-    m_strUID = uid;
-    m_strPWD = pwd;
-    m_strNode = host;
-    m_strHost = host;
+    uid = uid.stripLeading('\'').stripTrailing('\'');
+    if( uid.occurrencesOf(' ') ) uid = "'"+uid+"'";
+    CON_SET cs;
+    cs.DB = db;
+    cs.UID = uid;
+    cs.PWD = pwd;
+    cs.Host = host;
+    cs.Port = port;
     m_strPort = port;
-    m_strCurrentDatabase = db;
-    deb("::connect, connection data: "+m_strDB+", uid: "+m_strUID+", host: "+host+", port: "+port);
+    m_strDB = db;
+    m_strHost = host;
+    m_strPWD = pwd;
+    m_strUID = uid;
 
-    m_pgConn = PQsetdbLogin(host, port, "", "", db, uid, pwd);
+
+    deb("::connect (std), user out: "+uid);
+    m_pgConn = PQsetdbLogin(host, port, "", "", db, uid, pwd);    
     if (PQstatus(m_pgConn) != CONNECTION_OK)
     {
-        return sqlError();
+        GString err = PQerrorMessage(m_pgConn);
+        deb("::connect (std), conn failed, trying connSet");
+        return this->connectInternal(&cs);
     }
+    else m_postgresConnectionCounter++;
+    printf("ConnCount: %i\n", m_postgresConnectionCounter);
+    return "";
+}
+
+GString postgres::connectInternal(CON_SET * pCs)
+{
+
+    m_pgConn = NULL;
+    m_strDB = pCs->DB;
+    m_strUID = pCs->UID;
+    m_strUID = m_strUID.stripLeading('\'').stripTrailing('\'');
+    if( m_strUID.occurrencesOf(' ') ) m_strUID = "'"+m_strUID+"'";
+    m_strPWD = pCs->PWD;
+    m_strHost = pCs->Host;
+    if( pCs->Port.strip().length() == 0) pCs->Port = "5432";
+    m_strPort = pCs->Port;
+    m_strCurrentDatabase = pCs->DB;
+    m_strOptions = pCs->Options;
+    m_strPwdCmd = pCs->PwdCmd;
+
+    GString connString = createConnectionString(pCs);
+    clearPgRes();
+    m_pgConn = PQconnectdb(connString);
+    //deb("pgconn ptr: "+GString(val));
+
+    deb("::connect (ConnSet), connection data: "+connString);
+
+    if (PQstatus(m_pgConn) != CONNECTION_OK)
+    {
+        //GString err = PQerrorMessage(m_pgConn);
+        deb("::connect (ConnSet), connection failed. Status: "+GString(PQstatus(m_pgConn)));
+        this->sqlErrInternal();
+        m_pgConn = NULL;
+        return m_strLastError;
+    }
+    else m_postgresConnectionCounter++;
+    printf("ConnCount: %i\n", m_postgresConnectionCounter);
+    this->setEncoding(m_strEncoding);
+
     return "";
 }
 
 GString postgres::connect(CON_SET * pCs)
 {
-    m_strDB = pCs->DB;
-    m_strUID = pCs->UID;
-    m_strPWD = pCs->PWD;
-    m_strNode = pCs->Host;
-    m_strHost = pCs->Host;
-    m_strPort = pCs->Port;
-    m_strCurrentDatabase = pCs->DB;
+    return connectInternal(pCs);
+}
 
-    GString connInfo = "host="+pCs->Host;
-    connInfo += " dbname="+pCs->DB;
-    connInfo += " user="+pCs->UID;
-    connInfo += " password="+pCs->PWD;
-    connInfo += " port="+pCs->Port;
-    m_pgConn = PQconnectdb(connInfo);
+GString postgres::createConnectionString(CON_SET * pCs)
+{
+    GString out  = "host="+pCs->Host;
+    if( pCs->DB.strip().length() > 0 ) out += " dbname="+pCs->DB;
+    out += " user="+m_strUID;
+    out += " port="+pCs->Port;
+    if( pCs->Options.length() ) out += pCs->Options;
+    deb("::createConnectionString (ConnSet), connection data: "+out);
+    out += " password="+pCs->PWD;
+    return out;
+}
+
+
+GString postgres::reconnect(CON_SET *pCS)
+{
+    deb("reconnecting...");
+    if( !m_pgConn ) return 0;
+    deb("reconnecting and closing...calling PQClear...");
+    //clearPgRes();
+    deb("reconnecting and closing...check connn...");
+    if( m_pgConn == NULL )
+    {
+        deb("reconnecting: Already disconnected.");
+    }
+    else
+    {
+        deb("reconnecting and closing...calling PQfinish...");
+        GString hst = PQhost(m_pgConn);
+
+        int stat = PQstatus(m_pgConn);
+        int trStat = PQtransactionStatus(m_pgConn);
+        GString err = PQerrorMessage(m_pgConn);
+        deb("Disconnecting and closing...host: "+hst+", stat:"+GString(stat)+", trStat: "+GString(trStat)+", err: "+err);
+    }
+    PQfinish(m_pgConn);
+    m_pgConn = NULL;
+
+    GString connString = createConnectionString(pCS);
+    m_pgConn = PQconnectdb(connString);
+    //deb("pgconn ptr: "+GString(val));
+
+
     if (PQstatus(m_pgConn) != CONNECTION_OK)
     {
-        return sqlError();
+        deb("::reconnect, connection failed. Status: "+GString(PQstatus(m_pgConn)));
+        this->sqlErrInternal();
+        m_pgConn = NULL;
+        return m_strLastError;
     }
+    m_strLastError = PQerrorMessage(m_pgConn);
+    //int sqlCode = PQresultErrorField(m_pRes, PG_DIAG_SQLSTATE);
+    printf("ConnCount: %i\n", m_postgresConnectionCounter);
     return "";
 
-//    return this->connect(pCs->DB, pCs->UID, pCs->PWD, pCs->Host, pCs->Port);
 }
 
 int postgres::disconnect()
-{	
+{
 
     deb("Disconnecting and closing...");
     if( !m_pgConn ) return 0;
-    deb("Disconnecting and closing...calling PQfinish...");
+    deb("Disconnecting and closing...calling PQClear...");
+    clearPgRes();
+    deb("Disconnecting and closing...check connn...");
+    if( m_pgConn == NULL )
+    {
+        deb("Disconnect: Already disconnected.");
+    }
+    else
+    {
+        deb("Disconnecting and closing...calling PQfinish...");
+        GString hst = PQhost(m_pgConn);
+
+        int stat = PQstatus(m_pgConn);
+        int trStat = PQtransactionStatus(m_pgConn);
+        GString err = PQerrorMessage(m_pgConn);
+        deb("Disconnecting and closing...host: "+hst+", stat:"+GString(stat)+", trStat: "+GString(trStat)+", err: "+err);
+        //flushall();
+        //PQfinish(m_pgConn);
+        deb("Disconnecting done");
+    }
     PQfinish(m_pgConn);
     m_pgConn = NULL;
     deb("Disconnecting and closing...done.");
-	return 0;
+    m_postgresConnectionCounter--;
+    printf("ConnCount: %i\n", m_postgresConnectionCounter);
+    return 0;
 }
 
 
-GString postgres::initAllInternal(GString message, unsigned long maxRows,  int getLen, int maskLargeVals)
+GString postgres::initAllInternal(GString message, long maxRows,  int getLen, int readClobs)
 {
+
     printf("initall start, cmd: %s, getLen: %i\n", (char*) message, getLen);
     deb("::initAll, start. msg: "+message);
 
@@ -234,6 +365,7 @@ GString postgres::initAllInternal(GString message, unsigned long maxRows,  int g
     m_strLastSqlSelectCommand = message;
     m_iNumberOfRows = 0;
     m_iLastSqlCode = 0;
+    if( !m_pgConn ) return "Not connected.";
 
 
 
@@ -243,6 +375,7 @@ GString postgres::initAllInternal(GString message, unsigned long maxRows,  int g
         m_pRes = PQexec(m_pgConn, message);
         if (PQresultStatus(m_pRes) == PGRES_COMMAND_OK)
         {
+            clearPgRes();
             return "";
         }
         else
@@ -253,7 +386,7 @@ GString postgres::initAllInternal(GString message, unsigned long maxRows,  int g
     }
     else
     {
-        if( maxRows > 0 )  message = message + " LIMIT "+GString(maxRows);
+        if( maxRows >= 0 )  message = message + " LIMIT "+GString(maxRows);
     }
 
     // PQexec(m_pgConn, message); will fetch EVERYTHING,including LARGE bytea - this is completely dumb.
@@ -280,9 +413,15 @@ GString postgres::initAllInternal(GString message, unsigned long maxRows,  int g
         {
 
             if( PQgetisnull(m_pRes, i, j) ) data = "NULL";
-            else if( isLOBCol(j+1) ) data = "@DSQL@BLOB";
+            else if( sqlType(j+1) == BYTEA_PMF ) data = "@DSQL@BLOB";
+            else if( sqlType(j+1) == TEXT_PMF && !readClobs ) data = "@DSQL@CLOB";
             else if( isXMLCol(j+1) ) data = "@DSQL@XML";
             else if( isNumType(j+1) ) data = PQgetvalue(m_pRes, i, j);
+            else if( sqlType(j+1) == BOOL_PMF )
+            {
+                data = GString(PQgetvalue(m_pRes, 0, j)).strip("'");
+                data = data == "t" ? "'true'" : "'false'";
+            }
             else data = "'"+GString(PQgetvalue(m_pRes, i, j))+"'";
 
             pRow->addElement(data);
@@ -297,10 +436,8 @@ GString postgres::initAllInternal(GString message, unsigned long maxRows,  int g
         m_iNumberOfRows++;
         allRowsSeq.add( pRow );
     }
-    PQclear(m_pRes);
     m_pRes = PQexec(m_pgConn, "CLOSE myCRS");
 
-    PQclear(m_pRes);
     m_pRes = PQexec(m_pgConn, "END");
 
     return sqlError();
@@ -317,11 +454,10 @@ GString postgres::getConstraint(GString sqlCmd)
 int postgres::tryFastCursor(GString sqlCmd)
 {
     GString outerSelect = fillHostVarSeq(sqlCmd);
-    GString tryCmd = outerSelect + " FROM ("+sqlCmd +")";
+    GString tryCmd = outerSelect + " FROM ("+sqlCmd +") as XYZ";
 
 
     m_pRes = PQexec(m_pgConn, "BEGIN");
-
     tryCmd = "DECLARE myCRS CURSOR FOR "+tryCmd;
     m_pRes = PQexec(m_pgConn, tryCmd);
     if (PQresultStatus(m_pRes) == PGRES_COMMAND_OK)
@@ -329,20 +465,19 @@ int postgres::tryFastCursor(GString sqlCmd)
         return 0;
     }
     m_pRes = PQexec(m_pgConn, "END");
-    PQclear(m_pRes);
 
 
-    m_pRes = PQexec(m_pgConn, "BEGIN");
-    PQclear(m_pRes);
+    m_pRes = PQexec(m_pgConn, "BEGIN");    
     tryCmd = "DECLARE myCRS CURSOR FOR "+sqlCmd;
     m_pRes = PQexec(m_pgConn, tryCmd);
     if (PQresultStatus(m_pRes) != PGRES_COMMAND_OK)
     {
         sqlError();
         m_pRes = PQexec(m_pgConn, "END");
-        PQclear(m_pRes);
+        clearPgRes();
         return 1;
     }
+    clearPgRes();
     return 0;
 }
 
@@ -352,6 +487,7 @@ GString postgres::fillHostVarSeq(GString message)
     deb("fillHostVarSeq start");
     GString hostVar;
     m_pRes = PQexec(m_pgConn, "BEGIN");
+
     message = "DECLARE myCRS CURSOR FOR "+message;
     m_pRes = PQexec(m_pgConn, message);
 
@@ -359,10 +495,8 @@ GString postgres::fillHostVarSeq(GString message)
     {
         sqlError();
         m_pRes = PQexec(m_pgConn, "END");
-        PQclear(m_pRes);
         return m_strLastError;
     }
-    PQclear(m_pRes);
     m_iNumberOfColumns = PQnfields(m_pRes);
     m_pRes = PQexec(m_pgConn, "FETCH FORWARD 0 from myCRS");
     if (PQresultStatus(m_pRes) != PGRES_TUPLES_OK)
@@ -395,19 +529,141 @@ GString postgres::fillHostVarSeq(GString message)
         sqlTypeSeq.add(PQftype(m_pRes, i));
         deb("HostVars: col "+GString(i)+", name: "+GString(PQfname(m_pRes, i))+", type: "+GString(PQftype(m_pRes, i)));
     }
-    PQclear(m_pRes);
+    clearPgRes();
     m_pRes = PQexec(m_pgConn, "CLOSE myCRS");
-
-    PQclear(m_pRes);
     m_pRes = PQexec(m_pgConn, "END");
     deb("fillHostVarSeq donw");
     return newSelect.stripTrailing(',');
 }
 
 
-GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
+GString postgres::initAllCrs(GString message, long maxRows,  int getLen)
 {
-    //return initAllInternal(message, maxRows, getLen);
+
+    deb("::initAllCrs, start. msg: "+message);
+
+    //message = message.removeAll('\t');
+    deb("::initAllCrs, cleaned: "+message);
+
+    GRowHdl * pRow;
+
+    resetAllSeq();
+
+    m_strLastSqlSelectCommand = message;
+    m_iNumberOfRows = 0;
+    m_iLastSqlCode = 0;
+    if( !m_pgConn ) return "Not connected.";
+
+    GString firstWord = message;
+    if( firstWord.stripLeading(' ').subString(1, 6).upperCase() != "SELECT" )
+    {
+        //Bad
+        m_pRes = PQexec(m_pgConn, message);
+        if (PQresultStatus(m_pRes) == PGRES_COMMAND_OK)
+        {
+            sqlError();
+            return "";
+        }
+        else
+        {
+            sqlError();
+            if(m_strLastError.length()) return m_strLastError;
+        }
+    }
+
+    m_pRes = PQexec(m_pgConn, "BEGIN");
+    if (PQresultStatus(m_pRes) != PGRES_COMMAND_OK)
+    {
+        return sqlError();
+    }
+    message = "DECLARE myCRS CURSOR FOR "+message;
+    m_pRes = PQexec(m_pgConn, message);
+    if (PQresultStatus(m_pRes) != PGRES_COMMAND_OK)
+    {
+        sqlError();
+        m_pRes = PQexec(m_pgConn, "END");
+        return m_strLastError;
+    }
+    //Bad
+    //m_pRes = PQexec(m_pgConn, "FETCH ALL in myCRS");
+    m_pRes = PQexec(m_pgConn, "FETCH FIRST in myCRS");
+    if (PQresultStatus(m_pRes) != PGRES_TUPLES_OK)
+    {
+        GString err = sqlError();
+        PQexec(m_pgConn, "CLOSE myCRS");
+        PQexec(m_pgConn, "END");
+        return err;
+    }
+    deb("cols: "+GString(m_iNumberOfColumns));
+    m_iNumberOfColumns = PQnfields(m_pRes);
+    for (int i = 0; i < m_iNumberOfColumns; i++)
+    {
+
+        GString colName = GString(PQfname(m_pRes, i)).strip("\"");
+        int colType = PQftype(m_pRes, i);
+        if( colName == PSTGRS_ANON_COL ) colType = PSTGRS_ANON_TYPE;
+        hostVarSeq.add(colName);
+        sqlTypeSeq.add(colType);
+
+        deb("HostVars: col "+GString(i)+", name: "+colName+", type: "+GString(colType));
+    }
+    if( getLen )
+    {
+        for(int i = 1; i <= m_iNumberOfColumns; ++i ) sqlLenSeq.add(hostVariable(i).length()+1);
+    }
+    GString data;
+    long maxLen;
+    while(1)
+    {
+        if( PQntuples(m_pRes) == 0 ) break;
+        pRow = new GRowHdl;
+        for (int j = 0; j < m_iNumberOfColumns; j++)
+        {
+
+            if( PQgetisnull(m_pRes, 0, j) )data = "NULL";
+            else if( sqlType(j+1) == BYTEA_PMF ) data = "@DSQL@BLOB";
+            else if( sqlType(j+1) == TEXT_PMF && !m_iReadClobData ) data = "@DSQL@CLOB";
+            else if( isNumType(j+1) ) data = PQgetvalue(m_pRes, 0, j);
+            else if( sqlType(j+1) == BOOL_PMF )
+            {
+                data = GString(PQgetvalue(m_pRes, 0, j)).strip("'");
+                data = data == "t" ? "'true'" : "'false'";
+            }
+            else data = "'"+GString(PQgetvalue(m_pRes, 0, j))+"'";
+
+            pRow->addElement(data);
+            if( getLen )
+            {
+                maxLen = max((signed) data.strip("'").strip().length()+1, sqlLenSeq.elementAtPosition(j+1));
+                sqlLenSeq.replaceAt(j+1, maxLen);
+            }
+        }
+
+        if( maxRows >= 0 && m_iNumberOfRows >= maxRows ) break;
+        m_iNumberOfRows++;
+        allRowsSeq.add( pRow );
+        m_pRes = PQexec(m_pgConn, "FETCH NEXT in myCRS");
+        if (PQresultStatus(m_pRes) != PGRES_TUPLES_OK)
+        {
+            GString err = sqlError();
+            PQexec(m_pgConn, "CLOSE myCRS");
+            PQexec(m_pgConn, "END");
+            return err;
+        }
+        if( PQntuples(m_pRes) == 0 ) break;
+    }
+    printf("Stop get\n");
+    m_pRes = PQexec(m_pgConn, "CLOSE myCRS");
+    m_pRes = PQexec(m_pgConn, "END");
+    return sqlError();
+}
+
+
+
+GString postgres::initAll(GString message, long maxRows,  int getLen)
+{
+
+    return initAllCrs(message, maxRows, getLen);
 
     printf("initall start, cmd: %s, getLen: %i\n", (char*) message, getLen);
     deb("::initAll, start. msg: "+message);
@@ -419,6 +675,7 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
     m_strLastSqlSelectCommand = message;
     m_iNumberOfRows = 0;
     m_iLastSqlCode = 0;
+    if( !m_pgConn ) return "Not connected.";
 
     GString firstWord = message;
     if( firstWord.stripLeading(' ').subString(1, 6).upperCase() != "SELECT" )
@@ -427,6 +684,7 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
         m_pRes = PQexec(m_pgConn, message);
         if (PQresultStatus(m_pRes) == PGRES_COMMAND_OK)
         {
+            sqlError();
             return "";
         }
         else
@@ -435,11 +693,6 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
             if(m_strLastError.length()) return m_strLastError;
         }
     }
-    else
-    {
-        if( maxRows > 0 )  message = message + " LIMIT "+GString(maxRows);
-    }
-
 
     m_pRes = PQexec(m_pgConn, "BEGIN");
     if (PQresultStatus(m_pRes) != PGRES_COMMAND_OK)
@@ -447,7 +700,7 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
         return sqlError();
     }
 
-    PQclear(m_pRes);
+    clearPgRes();
 
 
     message = "DECLARE myCRS CURSOR FOR "+message;
@@ -456,10 +709,10 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
     {
         sqlError();
         m_pRes = PQexec(m_pgConn, "END");
-        PQclear(m_pRes);
+        clearPgRes();
         return m_strLastError;
     }
-    PQclear(m_pRes);
+    clearPgRes();
     //Bad
     m_pRes = PQexec(m_pgConn, "FETCH ALL in myCRS");
     //m_pRes = PQexec(m_pgConn, "FETCH FIRST in myCRS");
@@ -485,7 +738,7 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
     GString data;
     long maxLen;
     printf("Start get\n");
-    //while (PQresultStatus(res) == PGRES_TUPLES_OK)
+    //while (PQresultStatus(m_pRes) == PGRES_TUPLES_OK)
     for (int i = 0; i < PQntuples(m_pRes); i++)
     {
         pRow = new GRowHdl;
@@ -509,12 +762,13 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
         if( maxRows > 0 && m_iNumberOfRows >= maxRows ) break;
         m_iNumberOfRows++;
         allRowsSeq.add( pRow );
+
     }
     printf("Stop get\n");
-    PQclear(m_pRes);
+    clearPgRes();
     m_pRes = PQexec(m_pgConn, "CLOSE myCRS");
 
-    PQclear(m_pRes);
+    clearPgRes();
     m_pRes = PQexec(m_pgConn, "END");
 
     return sqlError();
@@ -584,25 +838,25 @@ GString postgres::initAll(GString message, unsigned long maxRows,  int getLen)
 int postgres::commit()
 {
     //m_db.commit();
-	return 0;
+    return 0;
 }
 
 int postgres::rollback()
 {
     //m_db.rollback();
-	return 0;
+    return 0;
 }
 
 
 int postgres::initRowCrs()
 {
-	deb("::initRowCrs");
+    deb("::initRowCrs");
     if( allRowsSeq.numberOfElements() == 0 ) return 1;
     m_pRowAtCrs = allRowsSeq.initCrs();
     return 0;
 }
 int postgres::nextRowCrs()
-{	
+{
     if( m_pRowAtCrs == NULL ) return 1;
     m_pRowAtCrs = allRowsSeq.setCrsToNext();
     return 0;
@@ -610,7 +864,7 @@ int postgres::nextRowCrs()
 long  postgres::dataLen(const short & pos)
 {
     if( pos < 1 || pos > (short) sqlLenSeq.numberOfElements()) return 0;
-    deb("Len at "+GString(pos)+": "+GString(sqlLenSeq.elementAtPosition(pos)));    
+    deb("Len at "+GString(pos)+": "+GString(sqlLenSeq.elementAtPosition(pos)));
     return sqlLenSeq.elementAtPosition(pos);
 }
 
@@ -743,10 +997,11 @@ GString postgres::currentCursor(GString filter, GString command, long curPos, sh
 
 int postgres::sqlCode()
 {
-	return m_iLastSqlCode;
+    return m_iLastSqlCode;
 }
-GString postgres::sqlError()
-{    
+
+GString postgres::sqlErrInternal()
+{
     char* sqlCode = NULL;
     if(m_pRes)
     {
@@ -759,7 +1014,6 @@ GString postgres::sqlError()
     deb("::sqlError: m_iLastSqlCode = "+GString(m_iLastSqlCode));
     m_strLastError = PQerrorMessage(m_pgConn);
     deb("::sqlError: m_strLastError = "+GString(m_strLastError));
-
     if( m_strLastError.length() )
     {
         m_iLastSqlCode = -1;
@@ -774,7 +1028,13 @@ GString postgres::sqlError()
         return GString(sqlCode)+": "+m_strLastError;
     }
     return m_strLastError;
-}		
+}
+
+
+GString postgres::sqlError()
+{
+    return sqlErrInternal();
+}
 
 int postgres::getTabSchema()
 {
@@ -800,11 +1060,11 @@ int postgres::getAllTables(GSeq <GString > * tabSeq, GString filter)
     PMF_UNUSED(tabSeq);
     PMF_UNUSED(filter);
     /*
-	QStringList sl = m_db.tables(QSql::AllTables);
-	tabSeq->removeAll();
-	for (int i = 0; i < sl.size(); ++i) tabSeq->add(sl.at(i));
+    QStringList sl = m_db.tables(QSql::AllTables);
+    tabSeq->removeAll();
+    for (int i = 0; i < sl.size(); ++i) tabSeq->add(sl.at(i));
     */
-	return 0;
+    return 0;
 }
 short postgres::sqlType(const short & col)
 {
@@ -824,16 +1084,16 @@ short postgres::sqlType(const GString & colName)
 }
 GString postgres::realName(const short & sqlType)
 {
-	switch(sqlType)
-	{
+    switch(sqlType)
+    {
             return "Numeric";
-			
+
             return "Time";
-			
-		default:
-			return "'string'";
-	}
-	return "";
+
+        default:
+            return "'string'";
+    }
+    return "";
 }
 
 int postgres::loadFileIntoBufNoConvert(GString fileName, char** fileBuf, int *size)
@@ -920,7 +1180,7 @@ int postgres::loadFileIntoBuf(GString fileName, char** fileBuf, int *size)
         deb("::loadFileIntoBuf reading file....");
         fseek(f, 0, SEEK_END);
         *size = ftell(f);
-        fseek(f, 0, SEEK_SET);        
+        fseek(f, 0, SEEK_SET);
         *fileBuf = new char[(*size)+1];
         int res = fread(*fileBuf,sizeof(char),*size, f);
         fclose(f);
@@ -947,14 +1207,12 @@ void postgres::impExpLob()
     Oid         lobjOid;
 
     m_pRes = PQexec(m_pgConn, "begin");
-    PQclear(m_pRes);
 
     lobjOid = lo_import(m_pgConn, "/home/moi/tok.txt");
 
     lo_export(m_pgConn, lobjOid, "/home/moi/tok3.txt");
 
     m_pRes = PQexec(m_pgConn, "end");
-    PQclear(m_pRes);
 }
 
 GString postgres::allPurposeFunction(GKeyVal *pKeyVal)
@@ -964,21 +1222,13 @@ GString postgres::allPurposeFunction(GKeyVal *pKeyVal)
     {
         GString oid = pKeyVal->getValForKey("UNLINK_BLOB");
         m_pRes = PQexec(m_pgConn, "begin");
-        PQclear(m_pRes);
         lo_unlink(m_pgConn, oid.asInt());
         m_pRes = PQexec(m_pgConn, "end");
         return sqlError();
     }
     if( pKeyVal->hasKey("EXPORT_TO_CSV"))
     {
-        GString cmd = pKeyVal->getValForKey("SQLCMD");
-        GString trgFile = pKeyVal->getValForKey("TARGET_FILE");
-        GString delim = pKeyVal->getValForKey("DELIM");
-        int wrHead = pKeyVal->getValForKey("WRITE_HEADER").asInt();
-        int byteaAsFile = pKeyVal->getValForKey("BYTEA_AS_FILE").asInt();
-        int xmlAsFile = pKeyVal->getValForKey("XML_AS_FILE").asInt();
-        int exportLobs = pKeyVal->getValForKey("EXPORT_LOBS").asInt();
-        return exportCsvBytea(cmd, trgFile, delim, wrHead, byteaAsFile, xmlAsFile, exportLobs);
+        return exportCsvBytea(pKeyVal);
     }
     return "";
 }
@@ -1059,29 +1309,25 @@ void postgres::convertToBin(GString inFile, GString outFile)
 
 
 
-GString postgres::exportCsvBytea(GString message, GString targetFile, GString delim, int writeHeader, int byteaAsFile, int xmlAsFile, int exportLobs)
+GString postgres::exportCsvBytea(GKeyVal *pKeyVal)
 {
 
-    deb("::exportByteArrayToFile, start. msg: "+message);
+    deb("::exportByteArrayToFile, start");
+    GString message = pKeyVal->getValForKey("SQLCMD");
+    GString targetFile = pKeyVal->getValForKey("TARGET_FILE");
+    GString delim = pKeyVal->getValForKey("DELIM");
+    GString codePage = pKeyVal->getValForKey("CODEPAGE");
+    int writeHeader = pKeyVal->getValForKey("WRITE_HEADER").asInt();
+    int byteaAsFile = pKeyVal->getValForKey("BYTEA_AS_FILE").asInt();
+    int xmlAsFile = pKeyVal->getValForKey("XML_AS_FILE").asInt();
+    int exportLobs = pKeyVal->getValForKey("EXPORT_LOBS").asInt();
+    int linebreak = pKeyVal->getValForKey("LINEBREAK").asInt();
 
-/*
-    if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "encode("+colName+",'base64')");
-    //if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "encode("+colName+",'hex')");
-    GString err = ps.initAll(cmd);
-    if( err.length() ) return err;
-
-    GString raw = ps.rowElement(1,1).strip("'");
-    FILE * f;
-    f = fopen(blobFile, "ab");
-    if( sqlType(colName) == PSTGRS_BYTEA )
+    if( codePage.strip().length() )
     {
-        GString g = "";
-
-        std::string ret = GStuff::base64_decode((char*) raw);
-        *outSize = fwrite((char*) ret.c_str(),1,ret.size(),f);
+        GString err = this->initAll("SET CLIENT_ENCODING TO '"+codePage+"'; ");
+        if( err.length() )return err;
     }
-    else *outSize = fwrite((char*) raw, 1, raw.length(), f);
-*/
 
 
     GFile trgFile(targetFile, GF_OVERWRITE);
@@ -1098,7 +1344,6 @@ GString postgres::exportCsvBytea(GString message, GString targetFile, GString de
         return sqlError();
     }
 
-    PQclear(m_pRes);
 
     message = "DECLARE myCRS CURSOR FOR "+message;
     m_pRes = PQexec(m_pgConn, message);
@@ -1106,10 +1351,8 @@ GString postgres::exportCsvBytea(GString message, GString targetFile, GString de
     {
         sqlError();
         m_pRes = PQexec(m_pgConn, "END");
-        PQclear(m_pRes);
         return m_strLastError;
     }
-    PQclear(m_pRes);
 
     m_pRes = PQexec(m_pgConn, "FETCH ALL in myCRS");
     if (PQresultStatus(m_pRes) != PGRES_TUPLES_OK)
@@ -1117,16 +1360,22 @@ GString postgres::exportCsvBytea(GString message, GString targetFile, GString de
         return sqlError();
     }
     deb("cols: "+GString(m_iNumberOfColumns));
+
+    sqlTypeSeq.removeAll();
     int colCount = PQnfields(m_pRes);
     GString out;
-
     //Header
     for (int i = 0; i < colCount; i++)
     {
         out += GString(PQfname(m_pRes, i)).strip("\"")+delim;
+        sqlTypeSeq.add(PQftype(m_pRes, i));
     }
     out = out.stripTrailing(delim);
-    if( writeHeader ) trgFile.addLine(out);
+    if( writeHeader )
+    {
+        if( linebreak) trgFile.addLineForOS(out);
+        else trgFile.addLine(out);
+    }
 
     //Rows
     GString data;
@@ -1148,43 +1397,46 @@ GString postgres::exportCsvBytea(GString message, GString targetFile, GString de
             }
             else if( isXMLCol(j+1) && xmlAsFile )
             {
-                GFile ba_file(targetFile+"_PMF_"+GString(i)+":"+GString(j), GF_OVERWRITE);
+                GFile ba_file(targetFile+"_PMF_"+GString(i)+"_"+GString(j), GF_OVERWRITE);
                 data = "'"+GString(PQgetvalue(m_pRes, i, j))+"'";
                 ba_file.addLine(data);
-                data = targetFile+"_PMF_"+GString(i)+":"+GString(j);
+                data = targetFile+"_PMF_"+GString(i)+"_"+GString(j);
             }
-            else if( isLOBCol(j+1) && byteaAsFile && exportLobs )
+            else if( (isLOBCol(j+1) || simpleColType(j+1) == CT_CLOB) && byteaAsFile && exportLobs )
             {
-//                GStuff::writeHexToBinFile(GString(PQgetvalue(m_pRes, i, j)), targetFile+"_PMF_"+GString(i)+":"+GString(j));
-//                data = targetFile+"_PMF_"+GString(i)+":"+GString(j);
-                GFile ba_file(targetFile+"_PMF_"+GString(i)+":"+GString(j), GF_OVERWRITE);
+                //GStuff::writeHexToBinFile("'"+GString(PQgetvalue(m_pRes, i, j))+"'", targetFile+"_PMF_"+GString(i)+"_"+GString(j));
+                //data = targetFile+"_PMF_"+GString(i)+"_"+GString(j);
+                GFile ba_file(targetFile+"_PMF_"+GString(i)+"_"+GString(j), GF_OVERWRITE);
                 data = "'"+GString(PQgetvalue(m_pRes, i, j))+"'";
+                deb("write out data: "+data+"<--");
                 ba_file.addLine(data);
-                data = targetFile+"_PMF_"+GString(i)+":"+GString(j);
+                data = targetFile+"_PMF_"+GString(i)+"_"+GString(j);
             }
-            else if( isLOBCol(j+1) && !exportLobs ) data ="NULL";
+            else if( sqlType(j+1) == BOOL_PMF )
+            {
+                data = GString(PQgetvalue(m_pRes, 0, j)).strip("'");
+                data = data == "t" ? "'true'" : "'false'";
+            }
+            else if( (isLOBCol(j+1) || simpleColType(j+1) == CT_CLOB) && !exportLobs ) data ="NULL";
             else data = "'"+GString(PQgetvalue(m_pRes, i, j))+"'";
             out += data + delim;
         }
         deb("::exportByteArrayToFile, row "+GString(i)+ " done.");
         out = out.stripTrailing(delim);
-        trgFile.addLine(out);
+        if( linebreak) trgFile.addLineForOS(out);
+        else trgFile.addLine(out);
         deb("::exportByteArrayToFile, row "+GString(i)+ " done, line added to trgFile");
     }
     deb("::exportByteArrayToFile, rows done.");
-    PQclear(m_pRes);
     m_pRes = PQexec(m_pgConn, "CLOSE myCRS");
-    PQclear(m_pRes);
-
     m_pRes = PQexec(m_pgConn, "END");
+
     return sqlError();
 }
-
 
 GString postgres::exportBlob(unsigned int oid, GString target)
 {
     m_pRes = PQexec(m_pgConn, "begin");
-    PQclear(m_pRes);
     int erc = lo_export(m_pgConn, oid, target);
     m_pRes = PQexec(m_pgConn, "end");
     if( erc == 1 ) return "";
@@ -1196,15 +1448,13 @@ long postgres::importBlob(GSeq <GString> *fileSeq)
     if( fileSeq->numberOfElements() == 0 ) return -1;
     Oid         lobjOid;
     m_pRes = PQexec(m_pgConn, "begin");
-    PQclear(m_pRes);
     lobjOid = lo_import(m_pgConn, fileSeq->elementAtPosition(1));
     m_pRes = PQexec(m_pgConn, "end");
-    PQclear(m_pRes);
     return lobjOid;
 }
 
 long postgres::uploadBlob(GString cmd, GSeq <GString> *fileSeq, GSeq <long> *lobType)
-{    
+{
     deb("::uploadBlob, cmd: "+cmd);
 
     if( lobType->elementAtPosition(1) == PSTGRS_LOB)
@@ -1251,7 +1501,10 @@ long postgres::uploadBlob(GString cmd, GSeq <GString> *fileSeq, GSeq <long> *lob
     delete [] fileSize;
 
     printf("PQresultStatus(res): %i\n", PQresultStatus(m_pRes));
-    if (PQresultStatus(m_pRes) != PGRES_COMMAND_OK) return -1;
+    if (PQresultStatus(m_pRes) != PGRES_COMMAND_OK)
+    {
+        return -1;
+    }
     m_iLastSqlCode = 0;
     return 0;
 }
@@ -1270,20 +1523,38 @@ GString postgres::descriptorToFile( GString cmd, GString &blobFile, int * outSiz
     GSeq<GString> cmdSeq = cmd.split(' ');
     if( cmdSeq.numberOfElements() < 2) return "Invalid sqlCmd: "+cmd;
 
-    GString colName = cmdSeq.elementAtPosition(2);
+    GString colName = cleanString(cmdSeq.elementAtPosition(2));
     if( colName == "*" ) return "Invalid column";
 
+    //1. translete colName
+    GString encCol = colName;
+    if( sqlType(colName) == PSTGRS_BYTEA ) encCol = "translate(encode("+colName+",'base64'), E'\n', '')";
+    if( sqlType(colName) == PSTGRS_XML )   encCol = "cast("+colName+" as text)";
+    if( sqlType(colName) == TEXT_PMF )   encCol = "cast("+colName+" as text)";
+    cmdSeq.replaceAt(2, encCol);
+    //2. rebuild cmd
+    cmd = "";
+    for(int i = 1; i <= cmdSeq.numberOfElements(); ++i)
+    {
+        cmd += cmdSeq.elementAtPosition(i)+" ";
+    }
+
+
+    /* Not good: If table is "DATA.XYZ" and colName is "DATA", the below 'change' fails:
     if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "translate(encode("+colName+",'base64'), E'\n', '')");
     //if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "translate(encode("+colName+",'hex'), E'\n', '')");
     if( sqlType(colName) == PSTGRS_XML ) cmd = cmd.change(colName, "cast("+colName+" as text)");
 
     //if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "encode("+colName+",'hex')");
     //if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "encode("+colName+",'escape')");
+    */
 
-    //GString err = ps.initAllInternal(cmd, 0, 0, 0);
-    GString err = ps.initAllInternal(cmd);
+    //GString err = ps.initAllInternal(cmd, -1, 0, 0);
+    deb("::descriptorToFile: translated cmd: "+cmd);
+    GString err = ps.initAllInternal(cmd, -1, 0, 1);
     if( ps.numberOfColumns() > 1 ) return "Invalid result (colCount > 1) for  '"+cmd+"'";
     if( err.length() ) return err;
+    if( ps.numberOfRows() == 0 ) return "Apparently table contents have changed.";
 
     GString raw = ps.rowElement(1,1).strip("'");
 
@@ -1302,8 +1573,10 @@ GString postgres::descriptorToFile( GString cmd, GString &blobFile, int * outSiz
     //If data was fetched as base64, use this:
     FILE * f;
     f = fopen(blobFile, "wb");
+    deb("::descriptorToFile: col: "+colName+", sqltype: "+GString(sqlType(colName)));
     if( sqlType(colName) == PSTGRS_BYTEA )
     {
+        deb("::descriptorToFile: have BYTEA");
         std::string ret = GStuff::base64_decode((char*) raw);
         *outSize = fwrite((char*) ret.c_str(),1,ret.size(),f);
     }
@@ -1333,7 +1606,8 @@ int postgres::simpleColType(int i)
     if( i < 1 || (unsigned long)i > sqlTypeSeq.numberOfElements() ) return CT_UNKNOWN;
 
     if(isXMLCol(i)) return CT_XML;
-    if(isLOBCol(i)) return CT_BLOB;
+    if(sqlType(i) == PSTGRS_BYTEA) return CT_BLOB;
+    if( sqlType(i) == TEXT_PMF ) return CT_CLOB;
     if(isNumType(i)) return CT_INTEGER;
     if(isDateTime(i)) return CT_DATE;
     return CT_STRING;
@@ -1344,9 +1618,9 @@ int postgres::isLOBCol(int i)
     if( i < 1 || (unsigned long)i > sqlTypeSeq.numberOfElements() ) return 0;
     switch(sqlTypeSeq.elementAtPosition(i))
     {
-    case PSTGRS_BYTEA:
-        return 1;
-
+        case PSTGRS_BYTEA:
+        case TEXT_PMF:
+            return 1;
     }
     return 0;
 }
@@ -1366,14 +1640,20 @@ int postgres::isFixedChar(int i)
 
 int postgres::getDataBases(GSeq <CON_SET*> *dbList)
 {
-    this->initAll("SELECT datname FROM pg_database order by datname");
+    GString err = this->initAll("SELECT datname FROM pg_database order by datname");
+    if( err.length() )
+    {
+        deb("getDataBases, error: "+err);
+        return 0;
+    }
     CON_SET * pCS;
     for( int i = 1; i <= this->numberOfRows(); ++i )
-    {        
+    {
         pCS = new CON_SET;
+        pCS->init();
         pCS->DB = this->rowElement(i, 1);
         deb("getDataBases, got "+pCS->DB);
-        pCS->Host = m_strNode;
+        pCS->Host = m_strHost;
         pCS->Type = _POSTGRES;
         pCS->Port = m_strPort;
         pCS->UID = m_strUID;
@@ -1381,8 +1661,8 @@ int postgres::getDataBases(GSeq <CON_SET*> *dbList)
         pCS->CltEnc = "";
         dbList->add(pCS);
     }
-	deb("getDataBases done");
-    return 0;    
+    deb("getDataBases done");
+    return 0;
 }
 
 
@@ -1409,7 +1689,7 @@ void postgres::resetAllSeq()
     sqlVarLengthSeq.removeAll();
     sqlIndVarSeq.removeAll();
     sqlForBitSeq.removeAll();
-	sqlBitSeq.removeAll();
+    sqlBitSeq.removeAll();
     sqlLenSeq.removeAll();
     simpleColTypeSeq.removeAll();
     m_iNumberOfRows   = 0;
@@ -1423,6 +1703,7 @@ void postgres::resetAllSeq()
       allRowsSeq.removeFirst();
     }
 }
+
 int postgres::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
 {
 
@@ -1471,7 +1752,7 @@ int postgres::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         /* DECIMAL: (LENGTH, SCALE) */
         else if( cSpec->ColType.occurrencesOf("decimal") || cSpec->ColType.occurrencesOf("numeric") )
         {
-            cSpec->Length = this->rowElement(i,3)+", "+this->rowElement(i,4);
+            cSpec->Length = this->rowElement(i,4)+", "+this->rowElement(i,5);
         }
         else if( cSpec->ColType.occurrencesOf("xml") || cSpec->ColType.occurrencesOf("bytea") )
         {
@@ -1481,13 +1762,6 @@ int postgres::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         {
             cSpec->Length = this->rowElement(i,3).strip("'");
         }
-        if( this->rowElement(i, 8) == "'YES'" )
-        {
-            cSpec->Identity = "Y";
-            cSpec->Misc = "GENERATED "+this->rowElement(i, 9).strip("\'")+" AS IDENTITY (START WITH "+this->rowElement(i, 10).strip("\'")+" INCREMENT BY "+this->rowElement(i, 11).strip("\'")+")";
-        }
-
-
         /* check for NOT NULL, DEFAULT */
         if( this->rowElement(i,6) == "'NO'" )
         {
@@ -1496,7 +1770,17 @@ int postgres::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         if( !this->isNull(i, 7) )
         {
             cSpec->Default = this->rowElement(i,7);
+            GString tmp = cSpec->Default;
+            if( tmp.lowerCase().removeAll(' ') == "'now()'" ) cSpec->Default = cleanString(cSpec->Default);
+            else if( tmp.upperCase() == "'CURRENT_TIMESTAMP'" ) cSpec->Default = cleanString(cSpec->Default);
         }
+        if( this->rowElement(i, 8) == "'YES'" )
+        {
+            cSpec->Identity = "Y";
+            cSpec->Misc = "GENERATED "+this->rowElement(i, 9).strip("\'")+" AS IDENTITY (START WITH "+this->rowElement(i, 10).strip("\'")+" INCREMENT BY "+this->rowElement(i, 11).strip("\'")+")";
+            //cSpec->Default = "";
+        }
+
         specSeq->add(cSpec);
 
     }
@@ -1515,7 +1799,7 @@ int postgres::getIdentityColParams(GString table, int *seed, int * incr)
     *incr = tmp->rowElement(1,1).asInt();
 
     delete tmp  ;
-	return 0;
+    return 0;
 }
 
 
@@ -1549,8 +1833,8 @@ GSeq <GString> postgres::getTriggerSeq(GString table)
     deb("getTriggers, cmd: "+cmd);
     for( unsigned long i = 1; i <= this->numberOfRows(); ++i )
     {
-        trig = "CREATE TRIGGER "+this->rowElement(i, 1).strip("'")+"."+this->rowElement(i, 1).strip("'")+" "+this->rowElement(i, 3).strip("'")+" ";
-        trig += this->rowElement(i, 4).strip("'")+" ON "+table+" "+this->rowElement(i, 5).strip("'");
+        trig = "CREATE OR REPLACE TRIGGER "+this->rowElement(i, 2).strip("'")+" "+this->rowElement(i, 3).strip("'")+" "+this->rowElement(i, 4).strip("'");
+        trig += " ON "+table+" FOR EACH ROW "+this->rowElement(i, 5).strip("'")+";";
         triggerSeq.add(trig);
     }
     this->setCLOBReader(0);
@@ -1574,7 +1858,19 @@ GSeq <IDX_INFO*> postgres::getIndexeInfo(GString table)
 //         "join pg_class idx on idx.oid = pgi.indexrelid  join pg_namespace insp on insp.oid = idx.relnamespace "
 //         "join pg_class tbl on tbl.oid = pgi.indrelid  join pg_namespace tnsp on tnsp.oid = tbl.relnamespace  where "
 //         "tnsp.nspname = '"+tabSchema(table)+"' and tbl.relname ='"+tabName(table)+"'";
-    getIndexInfo(cmd, &indexSeq, table);
+
+
+    cmd = "SELECT idx.indrelid, i.relname, idx.indisunique, idx.indisprimary, am.amname AS index_type, idx.indkey, "
+           "ARRAY(SELECT pg_get_indexdef(idx.indexrelid, k + 1, TRUE) FROM generate_subscripts(idx.indkey, 1) AS k ORDER BY k) AS index_keys, "
+           "FROM pg_index AS idx JOIN pg_class AS i ON i.oid = idx.indexrelid JOIN pg_am AS am ON i.relam = am.oid JOIN pg_namespace AS NS ON i.relnamespace = NS.OID "
+           " JOIN pg_user AS U ON i.relowner = U.usesysid where idx.indrelid  ='"+tabSchema(table, 1)+"."+tabName(table, 1)+"'::regclass ";
+
+    cmd ="SELECT idx.indrelid, relnamespace::regnamespace, i.relname, idx.indisunique, idx.indisprimary, am.amname AS index_type, idx.indkey, ixs.indexdef, "
+               "ARRAY(SELECT pg_get_indexdef(idx.indexrelid, k + 1, TRUE) FROM generate_subscripts(idx.indkey, 1) AS k ORDER BY k) AS index_keys "
+               "FROM pg_index AS idx JOIN pg_class AS i ON i.oid = idx.indexrelid JOIN pg_am AS am ON i.relam = am.oid JOIN pg_namespace AS NS ON i.relnamespace = NS.OID "
+               "join pg_indexes ixs on i.relname=indexname JOIN pg_user AS U ON i.relowner = U.usesysid where idx.indrelid ='\""+tabSchema(table, 1)+"\".\""+tabName(table, 1)+"\"'::regclass ";
+
+    getIndexInfoExtended(cmd, &indexSeq, table);
 
 
     //foreign keys
@@ -1594,14 +1890,21 @@ GSeq <IDX_INFO*> postgres::getIndexeInfo(GString table)
 /*
     cmd = "SELECT contype,connamespace::regnamespace, conrelid::regclass, attname, conname, pg_get_constraintdef(c.oid) as cmd "
            "FROM pg_attribute a JOIN pg_constraint c ON attrelid = conrelid AND attnum = ANY (conkey) "
-           "where connamespace='"+tabSchema(table)+"'::regnamespace and conrelid ='"+tabName(table)+"'::regclass "
-           "and contype = 'f' "
+           "where connamespace='"+tabSchema(table)+"'::regnamespace and conrelid ='"+table+"'::regclass "
+           //"and contype = 'f' "
            "order by c.contype, c.conname";
     getIndexInfo(cmd, &indexSeq);
 */
 
     cmd = "select 's', '"+tabSchema(table, 1)+"', '', 'N/A', indexname, indexdef from pg_catalog.pg_indexes where schemaname='"+tabSchema(table, 1)+"' and tablename='"+tabName(table,1)+"'";
     getIndexInfo(cmd, &indexSeq);
+
+/*
+    cmd = "select contype, schemaname, tablename, indexname, indexdef from pg_catalog.pg_indexes i "
+          "full outer join pg_constraint c on conname=indexname where schemaname='"+tabSchema(table,1)+"' and "
+          "tablename='"+tabName(table,1)+"'";
+    getIndexInfo(cmd, &indexSeq);
+*/
     return indexSeq;
 
 }
@@ -1609,7 +1912,7 @@ GSeq <IDX_INFO*> postgres::getIndexeInfo(GString table)
 void postgres::getIndexInfo(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tableName)
 {
 
-    GString err = this->initAll(cmd);
+    GString err = this->initAllInternal(cmd, -1, 0, 1);
     deb("::getIndexInfo, cmd: "+cmd);
     deb("::getIndexeInfo, err: "+err);
     deb("::getIndexInfo, found: "+GString(this->numberOfRows()));
@@ -1642,14 +1945,65 @@ void postgres::getIndexInfo(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tab
         pIdx->IsDisabled = "N/A";
         pIdx->DeleteRule = "N/A";
         pIdx->StatsTime = "N/A";
-        if( pIdx->Type == DEF_IDX_FORKEY ) pIdx->Stmt = "ALTER TABLE "+tableName+ " ADD CONSTRAINT "+this->rowElement(i, 5).strip("'")+" "+this->rowElement(i, 6).strip("'");
-        else pIdx->Stmt = this->rowElement(i, 6).strip("'");
+        if( pIdx->Type == DEF_IDX_FORKEY ) pIdx->Stmt = "ALTER TABLE "+tableName+ " ADD CONSTRAINT "+this->rowElement(i, 5).strip("'")+" "+this->rowElement(i, 6).strip("'")+";";
+        else pIdx->Stmt = this->rowElement(i, 6).strip("'")+";";
         indName = this->rowElement(i, 5).strip("'");
 
         addToIdxSeq(indexSeq, pIdx);
         deb("::fillIndexView, i: "+GString(i)+", currIDx: "+GString(i));
     }
 }
+
+void postgres::getIndexInfoExtended(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tableName)
+{
+
+    GString err = this->initAllInternal(cmd, -1, 0, 1);
+    deb("::getIndexInfo, cmd: "+cmd);
+    deb("::getIndexeInfo, err: "+err);
+    deb("::getIndexInfo, found: "+GString(this->numberOfRows()));
+
+    GString indName = "";
+    IDX_INFO * pIdx;
+    for(int  i=1; i<=(int)this->numberOfRows(); ++i )
+    {
+        if( this->rowElement(i, 5).strip("'") == indName )
+        {
+            pIdx = indexSeq->lastElement();
+            pIdx->Columns += ", "+this->rowElement(i, 4).strip("'");
+            continue;
+        }
+        pIdx = new IDX_INFO;
+        pIdx->Iidx = GString(i);
+        pIdx->Schema = this->rowElement(i, 2).strip("'").strip('\"');
+        pIdx->Name = this->rowElement(i, 3).strip("'");
+
+        GString col5 = this->rowElement(i, 5).strip("'");
+        GString col4 = this->rowElement(i, 4).strip("'");
+
+        if( this->rowElement(i, 5).strip("'") == GString("true") || this->rowElement(i, 5).strip("'") == "t") pIdx->Type = DEF_IDX_PRIM;
+        else if( this->rowElement(i, 4).strip("'") == GString("true") || this->rowElement(i, 4).strip("'") == "t") pIdx->Type = DEF_IDX_UNQ;
+        else pIdx->Type = DEF_IDX_DUPL;
+
+        pIdx->Columns = this->rowElement(i, 9).strip("'").strip('{').strip('}').change("\\\"", "");
+
+        pIdx->CreateTime = "N/A";
+        pIdx->StatsTime = "N/A";
+        pIdx->IsDisabled = "N/A";
+        pIdx->DeleteRule = "N/A";
+        pIdx->StatsTime = "N/A";
+
+
+        if( pIdx->Type == DEF_IDX_PRIM )
+        {
+            pIdx->Stmt= "ALTER TABLE "+tableName+" ADD PRIMARY KEY ("+pIdx->Columns+")";
+        }
+        else pIdx->Stmt = this->rowElement(i, 8).strip("'")+";";
+
+        addToIdxSeq(indexSeq, pIdx);
+        deb("::fillIndexView, i: "+GString(i)+", currIDx: "+GString(i));
+    }
+}
+
 
 void postgres::addToIdxSeq(GSeq <IDX_INFO*> *indexSeq, IDX_INFO *pIdx)
 {
@@ -1679,7 +2033,7 @@ GString postgres::getColumnsFromCreateStmt(GString stmt)
 
 /*
 GSeq <IDX_INFO*> postgres::getIndexeInfo(GString table)
-{                
+{
 
 //    this->initAll("use "+m_strCurrentDatabase);
 
@@ -1696,7 +2050,7 @@ GSeq <IDX_INFO*> postgres::getIndexeInfo(GString table)
     IDX_INFO * pIdx;
     for(int  i=1; i<=(int)this->numberOfRows(); ++i )
     {
-        pIdx = new IDX_INFO;        
+        pIdx = new IDX_INFO;
         deb("::getIndexeInfo, i: "+GString(i));
         GString cols = this->rowElement(i, 3).strip("'");
         cols = cols.subString(cols.indexOf("(")+1, cols.length()).strip();
@@ -1863,8 +2217,8 @@ GString postgres::tabSchema(GString table, int removeDoubleQuotes)
 
 void postgres::createXMLCastString(GString &xmlData)
 {
-	deb("::createXMLCastString called");
-	xmlData = " cast('"+(xmlData)+"' as xml)";
+    deb("::createXMLCastString called");
+    xmlData = " cast('"+(xmlData)+"' as xml)";
 }
 
 int postgres::isBinary(unsigned long row, int col)
@@ -1892,6 +2246,8 @@ int postgres::isTruncated(unsigned long row, int col)
     GRowHdl *aRow;
     aRow = allRowsSeq.elementAtPosition(row);
     if( row < 1 || (unsigned long) col > aRow->elements() ) return 0;
+    DATA_CELL *dc = aRow->rowElement(col);
+    if( dc == NULL ) return 0;
     return aRow->rowElement(col)->isTruncated;
 }
 void postgres::deb(GString fnName, GString txt)
@@ -1919,6 +2275,7 @@ GString postgres::cleanString(GString in)
 {
     if( in.length() < 2 ) return in;
     if( in[1UL] == '\'' && in[in.length()] == '\'' ) return in.subString(2, in.length()-2);
+    //if( in[1UL] == '\"' && in[in.length()] == '\"' ) return in.subString(2, in.length()-2);
     return in;
 }
 int postgres::isLongTypeCol(int i)
@@ -1969,7 +2326,7 @@ int postgres::exportAsTxt(int mode, GString sqlCmd, GString table, GString outFi
     aSeq.add("-- USE [DataBase] ");
     aSeq.add("");
 
-	aSeq.add("-- SET IDENTITY_INSERT "+table+" ON");
+    aSeq.add("-- SET IDENTITY_INSERT "+table+" ON");
 
     for(unsigned long i = 1; i <= startText->numberOfElements(); ++i) aSeq.add(startText->elementAtPosition(i));
 
@@ -1996,7 +2353,7 @@ int postgres::exportAsTxt(int mode, GString sqlCmd, GString table, GString outFi
         {
             data = this->rowElement(i, j);
             if( this->isNumType(j))  out += cleanString(data)+", ";
-			else if( data == "NULL" )out += data+", ";
+            else if( data == "NULL" )out += data+", ";
             else if( data.occurrencesOf("@DSQL@") ) out +="NULL, ";
             else out += data+", ";
         }
@@ -2011,7 +2368,7 @@ int postgres::exportAsTxt(int mode, GString sqlCmd, GString table, GString outFi
         }
     }
     for(unsigned long i = 1; i <= endText->numberOfElements(); ++i) aSeq.add(endText->elementAtPosition(i));
-	aSeq.add("-- SET IDENTITY_INSERT "+table+" OFF");
+    aSeq.add("-- SET IDENTITY_INSERT "+table+" OFF");
     f.append(&aSeq);
 
     return 0;
@@ -2020,7 +2377,7 @@ int postgres::deleteTable(GString tableName)
 {
     this->initAll("drop table "+tableName);
     this->sqlError();
-	return sqlCode();
+    return sqlCode();
 }
 
 
@@ -2084,16 +2441,24 @@ void postgres::clearSequences()
         delete pRowData;
         rowSeq.removeFirst();
     }
-	headerSeq.removeAll();
+    headerSeq.removeAll();
 }
 
 GString postgres::getDdlForView(GString tableName)
-{       
+{
+    this->initAll("select * from "+tableName, 1);
+    GString cols;
+    for(int i = 1; i <= this->numberOfColumns();++i)
+    {
+        cols += "\""+this->hostVariable(i)+"\", ";
+    }
+    cols = "(" + cols.stripTrailing(", ") + ") ";
+
     this->setCLOBReader(1);
     this->initAll("SELECT VIEW_DEFINITION FROM INFORMATION_SCHEMA.VIEWS WHERE TABLE_SCHEMA='"+ tabSchema(tableName, 1)+"' AND TABLE_NAME='"+tabName(tableName, 1)+"'");
     this->setCLOBReader(1);
     if( this->numberOfRows() == 0 ) return "";
-    return "CREATE VIEW "+tabName(tableName)+" AS "+  cleanString(this->rowElement(1, 1).strip());
+    return "CREATE VIEW "+tableName+"\n"+cols+"\nAS "+  cleanString(this->rowElement(1, 1).strip())+"; ";
 }
 
 void postgres::setAutoCommmit(int commit)
@@ -2142,7 +2507,8 @@ void postgres::currentConnectionValues(CON_SET * conSet)
     conSet->Port = m_strPort;
     conSet->CltEnc = m_strEncoding;
     conSet->Type = _POSTGRES;
-
+    conSet->Options = m_strOptions;
+    conSet->PwdCmd = m_strPwdCmd;
 }
 
 GString postgres::lastSqlSelectCommand()
@@ -2177,7 +2543,18 @@ GString postgres::addQuotes(GString in)
 
 int postgres::deleteViaFetch(GString tableName, GSeq<GString> * colSeq, int rowCount, GString whereClause)
 {
-    GString cmd = "DELETE FROM "+tableName +" WHERE (";
+    GString cmd;
+    if( colSeq->numberOfElements() == 0 )
+    {
+        cmd = "DELETE FROM "+tableName;
+        if( whereClause.length() ) cmd += " WHERE "+whereClause;
+        GString err = this->initAll(cmd, rowCount);
+        if( err.length() ) return sqlCode();
+        return 0;
+    }
+
+
+    cmd = "DELETE FROM "+tableName +" WHERE (";
     for( int i = 1; i <= colSeq->numberOfElements(); ++i )
     {
         cmd += addQuotes(colSeq->elementAtPosition(i))+",";
@@ -2201,6 +2578,24 @@ void postgres::setCLOBReader(short readCLOBData )
     m_iReadClobData = readCLOBData;
 }
 
+void postgres::clearPgRes()
+{
+	if( !m_pgConn ) return;
+    char* sqlCode = NULL;
+    int count = 0;
+    if(m_pRes)
+    {
+        sqlCode = PQresultErrorField(m_pRes, PG_DIAG_SQLSTATE);
+        count = PQntuples(m_pRes);
+    }
+    if( sqlCode != NULL )
+    {
+        int x = count;
+    }
+    PQclear(m_pRes);
+    //m_pRes = NULL;
+}
+
 /******************************************************************
  *
  *  ifdef: Use QT for some tasks
@@ -2210,9 +2605,9 @@ void postgres::setCLOBReader(short readCLOBData )
 GString postgres::getIdenticals(GString table, QWidget* parent, QListWidget *pLB, short autoDel)
 {
 
-	GString message = "SELECT * FROM "+table;
-	GString retString = "";
-	deb("::getIdenticals, cmd: "+message);
+    GString message = "SELECT * FROM "+table;
+    GString retString = "";
+    deb("::getIdenticals, cmd: "+message);
 
 
     return retString;
@@ -2229,78 +2624,78 @@ void postgres::writeToLB(QListWidget * pLB, GString message)
 GString  postgres::fillIndexView(GString table, QWidget* parent, QTableWidget *pWdgt)
 {
     PMF_UNUSED(parent);
-	//Clear data:
-	while( pWdgt->rowCount() ) pWdgt->removeRow(0);
-	
-	GString id, name, cols, unq, crt, mod, dis;
-	int indexID = -1;
+    //Clear data:
+    while( pWdgt->rowCount() ) pWdgt->removeRow(0);
+
+    GString id, name, cols, unq, crt, mod, dis;
+    int indexID = -1;
     //this->initAll("use "+m_strCurrentDatabase);
-	
+
     GString cmd = "select i.index_id, i.name, c.name,  i.is_primary_key, i.is_unique_constraint,"
-			"create_date, modify_date, i.is_disabled "
+            "create_date, modify_date, i.is_disabled "
             "from sys.tables t  inner join sys.schemas s on t.schema_id = s.schema_id "
             "inner join sys.indexes i on i.object_id = t.object_id "
             "inner join sys.index_columns ic on ic.object_id = t.object_id "
             "inner join sys.columns c on c.object_id = t.object_id and ic.column_id = c.column_id "
             "where s.name='"+tabSchema(table, 1)+"' and t.name='"+tabName(table, 1)+"'";
     this->initAll(cmd);
-	deb("::fillIndexView, cmd: "+cmd);
+    deb("::fillIndexView, cmd: "+cmd);
     deb("::fillIndexView, found: "+GString(this->numberOfRows()));
 
     pWdgt->setColumnCount(7);
-	
-	QTableWidgetItem * pItem;
-	int i = 0;
-	pItem = new QTableWidgetItem("IndexID"); pWdgt->setHorizontalHeaderItem(i++, pItem);
+
+    QTableWidgetItem * pItem;
+    int i = 0;
+    pItem = new QTableWidgetItem("IndexID"); pWdgt->setHorizontalHeaderItem(i++, pItem);
     pItem = new QTableWidgetItem("Name"); pWdgt->setHorizontalHeaderItem(i++, pItem);
-	pItem = new QTableWidgetItem("Columns"); pWdgt->setHorizontalHeaderItem(i++, pItem);
+    pItem = new QTableWidgetItem("Columns"); pWdgt->setHorizontalHeaderItem(i++, pItem);
     pItem = new QTableWidgetItem("Type"); pWdgt->setHorizontalHeaderItem(i++, pItem);
-	pItem = new QTableWidgetItem("Created"); pWdgt->setHorizontalHeaderItem(i++, pItem);
-	pItem = new QTableWidgetItem("Modified"); pWdgt->setHorizontalHeaderItem(i++, pItem);
-	pItem = new QTableWidgetItem("IsDisabled"); pWdgt->setHorizontalHeaderItem(i++, pItem);
-	
-	int row = 0;
+    pItem = new QTableWidgetItem("Created"); pWdgt->setHorizontalHeaderItem(i++, pItem);
+    pItem = new QTableWidgetItem("Modified"); pWdgt->setHorizontalHeaderItem(i++, pItem);
+    pItem = new QTableWidgetItem("IsDisabled"); pWdgt->setHorizontalHeaderItem(i++, pItem);
+
+    int row = 0;
     for(int  i=1; i<= (int)this->numberOfRows(); ++i )
     {
-		deb("::fillIndexView, i: "+GString(i));
+        deb("::fillIndexView, i: "+GString(i));
         if( this->rowElement(i, 1).strip("'").asInt() != indexID )
         {
-			deb("::fillIndexView, i: "+GString(i)+", indexChg, new: "+GString(indexID));
-			if( cols.length() )
-			{
-				cols = cols.stripTrailing(", ");
-				createIndexRow(pWdgt, row++, id, name, cols, unq, crt, mod, dis);
-			}
-			id   = this->rowElement(i, 1);
-			name = this->rowElement(i, 2);
-			cols = ""; 
-			if( this->rowElement(i, 4) == "'1'" ) unq = "Primary Key";
-			else if( this->rowElement(i, 5) == "'1'" ) unq = "Unique Key";
-			else unq = "";
-			crt = this->rowElement(i, 6);
-			mod = this->rowElement(i, 7);
-			dis = this->rowElement(i, 8);
-            indexID = this->rowElement(i, 1).strip("'").asInt();
-			deb("::fillIndexView, i: "+GString(i)+", currIDx: "+GString(id)+", cols: "+cols);
+            deb("::fillIndexView, i: "+GString(i)+", indexChg, new: "+GString(indexID));
+            if( cols.length() )
+            {
+                cols = cols.stripTrailing(", ");
+                createIndexRow(pWdgt, row++, id, name, cols, unq, crt, mod, dis);
+            }
+            id   = this->rowElement(i, 1);
+            name = this->rowElement(i, 2);
+            cols = "";
+            if( this->rowElement(i, 4) == "'1'" ) unq = "Primary Key";
+            else if( this->rowElement(i, 5) == "'1'" ) unq = "Unique Key";
+            else unq = "";
+            crt = this->rowElement(i, 6);
+            mod = this->rowElement(i, 7);
+            dis = this->rowElement(i, 8);
+                        indexID = this->rowElement(i, 1).strip("'").asInt();
+                        deb("::fillIndexView, i: "+GString(i)+", currIDx: "+GString(id)+", cols: "+cols);
         }
-		cols += this->rowElement(i, 3).strip("'")+", ";
-		deb("::fillIndexView, i: "+GString(i)+", currIDx: "+GString(id)+", cols: "+cols);
+        cols += this->rowElement(i, 3).strip("'")+", ";
+        deb("::fillIndexView, i: "+GString(i)+", currIDx: "+GString(id)+", cols: "+cols);
     }
-	if( cols.length() )
-	{
-		cols = cols.stripTrailing(", ");
-		createIndexRow(pWdgt, row++, id, name, cols, unq, crt, mod, dis);
-		deb("::fillIndexView, final: "+GString(id)+", cols: "+cols);
-	}
-	return "";
+    if( cols.length() )
+    {
+        cols = cols.stripTrailing(", ");
+        createIndexRow(pWdgt, row++, id, name, cols, unq, crt, mod, dis);
+        deb("::fillIndexView, final: "+GString(id)+", cols: "+cols);
+    }
+    return "";
 }
 
 GString postgres::setEncoding(GString encoding)
 {
     deb("setEncoding, in: "+encoding);
-    if( m_strEncoding == encoding ) return "";
+    //if( m_strEncoding == encoding ) return "";
     if(!encoding.strip().length()) return "";
-    m_strEncoding = encoding;    
+    m_strEncoding = encoding;
     return this->initAll("SET CLIENT_ENCODING TO '"+encoding+"'; ");
 }
 
@@ -2351,20 +2746,20 @@ void postgres::getAvailableEncodings(GSeq<GString> *encSeq)
 }
 
 void postgres::createIndexRow(QTableWidget *pWdgt, int row,
-		GString id, GString name, GString cols, GString unq, GString crt, GString mod, GString dis)
+        GString id, GString name, GString cols, GString unq, GString crt, GString mod, GString dis)
 {
-	if( !id.length() ) return;
-	deb("::fillIndexView, createRow, id: "+id);
-	int j = 0;
-	QTableWidgetItem * pItem;
-	pWdgt->insertRow(pWdgt->rowCount());
-	pItem = new QTableWidgetItem(); pItem->setText(id);   pWdgt->setItem(row, j++, pItem);
-	pItem = new QTableWidgetItem(); pItem->setText(name); pWdgt->setItem(row, j++, pItem);
-	pItem = new QTableWidgetItem(); pItem->setText(cols); pWdgt->setItem(row, j++, pItem);
-	pItem = new QTableWidgetItem(); pItem->setText(unq);  pWdgt->setItem(row, j++, pItem);
-	pItem = new QTableWidgetItem(); pItem->setText(crt);  pWdgt->setItem(row, j++, pItem);
-	pItem = new QTableWidgetItem(); pItem->setText(mod);  pWdgt->setItem(row, j++, pItem);
-	pItem = new QTableWidgetItem(); pItem->setText(dis);  pWdgt->setItem(row, j++, pItem);
+    if( !id.length() ) return;
+    deb("::fillIndexView, createRow, id: "+id);
+    int j = 0;
+    QTableWidgetItem * pItem;
+    pWdgt->insertRow(pWdgt->rowCount());
+    pItem = new QTableWidgetItem(); pItem->setText(id);   pWdgt->setItem(row, j++, pItem);
+    pItem = new QTableWidgetItem(); pItem->setText(name); pWdgt->setItem(row, j++, pItem);
+    pItem = new QTableWidgetItem(); pItem->setText(cols); pWdgt->setItem(row, j++, pItem);
+    pItem = new QTableWidgetItem(); pItem->setText(unq);  pWdgt->setItem(row, j++, pItem);
+    pItem = new QTableWidgetItem(); pItem->setText(crt);  pWdgt->setItem(row, j++, pItem);
+    pItem = new QTableWidgetItem(); pItem->setText(mod);  pWdgt->setItem(row, j++, pItem);
+    pItem = new QTableWidgetItem(); pItem->setText(dis);  pWdgt->setItem(row, j++, pItem);
 
 }
 #endif

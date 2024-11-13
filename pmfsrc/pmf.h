@@ -72,8 +72,8 @@ public:
     void addToHostVarSeq(GSeq <GString> * pSeq);
     QStringList completerStringList();
     void getNewVersion();
-    void setColorScheme(int scheme, QPalette palette);
-    int getColorScheme();
+    void setColorScheme(PmfColorScheme scheme, QPalette palette);
+    PmfColorScheme getColorScheme();
     void refreshTabOrder();
     void setFontFromSettings();
 
@@ -103,12 +103,13 @@ private:
     void createCheckBoxActions();
     void setAndConnectActions(QSettings *settings,  QAction* action, QString name, QString defVal= "");
     GString getVersionFromHTML(GString data);
-    void createDownloadInfo();
+    void createInfoArea();
     int closeTab(int index);
     TabEdit * getCurrentTabWdgt();
     QStringList availableEncodings();
     GString saveEncoding();
     GString getEncoding();
+    GString getPwdFromCmd(GString cmd, GString *pwd);
 	
 	QMenu * m_stylesMenu;
 	QMenu * m_charForBitMenu;
@@ -120,6 +121,7 @@ private:
 	GString m_gstrPWD;
     GString m_gstrPort;
 	GString m_gstrNODE;
+    GString m_gstrConnectionColor;
 	int m_iCurrentTab;
 
 	int m_iTabIDCounter;
@@ -137,6 +139,7 @@ private:
     QAction *m_actTextCompleter;
 	QAction *m_actCountAllRows;
     QAction *m_actConvertGuid;
+    QAction *m_actAutoLoadTable;
     QAction *m_actReadUncommitted;
     QAction *m_actHideSysTabs;
     QAction *m_actUseEscKey;
@@ -156,6 +159,8 @@ private:
 	int m_iCharForBit;
     int m_iRestore;
     int m_iShowing;
+    int m_iReconnectWaitTime;
+    GString m_gstrPwdCmd;
     GString m_strHistTableName;
     GString m_strLastSelectedSchema;
 	GString m_strLastSelectedContext;
@@ -167,11 +172,19 @@ private:
     GSeq <GString> m_hostVarSeq;
     GSeq <GString> m_sqlCmdSeq;
     MyThread * aThread;
-    QTimer *timer;
+    QTimer *versionCheckTimer;
+    QTimer *reconnectTimer;
+
     Downloader * m_pDownloader;
     QPushButton * downloadCancelButton;
     QGroupBox * downloadInfoBox;
-    int m_iColorScheme;
+
+    QPushButton * reconnectNowBt;
+    QGroupBox * reconnectInfoBox;
+    QLineEdit * reconnectInfoLE;
+
+
+    PmfColorScheme m_iColorScheme;
     QPalette m_qPalette;
     GSeq <CHECKBOX_ACTION *> m_cbMenuActionSeq;
     int timerCount;
@@ -197,6 +210,7 @@ private slots:
 	void getTabSpace();
 	void tableSizes();
 	void setPmfFont();
+    void setConnectionColor();
     void resetPmfFont();
 	void snapShot();
 	void showInfo(); 
@@ -217,10 +231,11 @@ private slots:
     void showHelp();
 	void showDebug();
     GString checkForUpdate(int todayOnly = 0);
-    void timerEvent();
+    void versionCheckTimerEvent();
+    void reconnectTimerEvent();
     void checkDownloadSize();
     void handleDownloadResult();
-    void downloadCancelled();
+    void downloadCancelled();    
     void addNewTab();       
     void bookmarkMenuClicked();
     void showDatabaseInfo();
@@ -229,6 +244,7 @@ private slots:
 public slots:	
     int loginClicked();
 	void curTabChg(int index);
+    void reconnectNowClicked();
 
   protected:
     void showEvent( QShowEvent * evt);

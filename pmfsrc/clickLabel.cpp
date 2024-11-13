@@ -1,4 +1,5 @@
 #include "clickLabel.h"
+#include "helper.h"
 
 
 ClickLabel::ClickLabel(const QString& text, QWidget* parent) : QLabel(parent)
@@ -7,7 +8,9 @@ ClickLabel::ClickLabel(const QString& text, QWidget* parent) : QLabel(parent)
     f.setUnderline(true);
     setFont(f);
     setText(text);
-    setStyleSheet("QLabel { color : blue; }");
+    if(Helper::isSystemDarkPalette() )setStyleSheet("QLabel { color : #386ce5; }");
+    else setStyleSheet("QLabel { color : blue; }");
+
     setAlignment(Qt::AlignRight);
     connect(this, SIGNAL(clicked()), SLOT(wasClicked()));
     _parent = parent;

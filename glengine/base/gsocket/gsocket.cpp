@@ -428,7 +428,6 @@ int GSocket::connect ( GString host, int port )
    	#ifdef MAKE_VC
 	WSADATA wsaData;
 	int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
-	if(iResult != NO_ERROR)
 	if ( iResult != NO_ERROR ) 
 	{
 		deb("WSAStartup Err: "+GString(iResult));

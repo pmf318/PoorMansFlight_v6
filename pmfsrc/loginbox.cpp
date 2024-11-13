@@ -26,6 +26,8 @@
 #include "gxml.hpp"
 #include "addDatabaseHost.h"
 #include "selectEncoding.h"
+#include "newConn.h"
+#include "gkeyval.hpp"
 
 #include <dsqlplugin.hpp>
 #include <dbapiplugin.hpp>
@@ -92,6 +94,8 @@ LoginBox::LoginBox( GDebug *pGDeb, QWidget* parent ): QDialog(parent)
     hostNameCB = new QComboBox();
     hostNameCB->setFixedHeight( hostNameCB->sizeHint().height() );
     m_pMainGrid->addWidget(hostNameCB, startRow+1, 1, 1, 2);
+    hostNameCB->setInsertPolicy(QComboBox::InsertAlphabetically);
+
 
     dbNameCB = new QComboBox( );
 	dbNameCB->setFixedHeight( dbNameCB->sizeHint().height() );
@@ -100,26 +104,45 @@ LoginBox::LoginBox( GDebug *pGDeb, QWidget* parent ): QDialog(parent)
     dbNameCB->setInsertPolicy(QComboBox::InsertAlphabetically);
 
 
+
 	
-	userNameLE = new QLineEdit(  );
-	userNameLE->setText( "" );
-	userNameLE->setFixedHeight( userNameLE->sizeHint().height() );
-    m_pMainGrid->addWidget(userNameLE, startRow+3, 1, 1, 2);
+    userNameCB = new QComboBox(  );
+    userNameCB->setFixedHeight( userNameCB->sizeHint().height() );
+    userNameCB->setEditable(true);
+    m_pMainGrid->addWidget(userNameCB, startRow+3, 1, 1, 2);
 	
 	
 	passWordLE = new QLineEdit();
 	passWordLE->setText( "" );
 	passWordLE->setEchoMode(QLineEdit::Password);
 	passWordLE->setFixedHeight( passWordLE->sizeHint().height() );
-    m_pMainGrid->addWidget(passWordLE, startRow+4, 1, 1, 2);
+    m_pMainGrid->addWidget(passWordLE, startRow+4, 1, 1, 1);
 
+    viewPwdB = new QPushButton(this);
+    QPixmap pixmap(":eye3.png.piko");
+    QIcon ButtonIcon(pixmap);
+    viewPwdB->setIcon(ButtonIcon);
+    viewPwdB->setIconSize(QSize(16,16));
+    m_pMainGrid->addWidget(viewPwdB, startRow+4, 2);
+    connect( viewPwdB, SIGNAL(clicked()), SLOT(togglePwdClicked()) );
+
+    //CheckBox widget
+    QHBoxLayout *chckBxLayout = new QHBoxLayout;
+    QWidget * chckBxWidget = new QWidget();
+    chckBxWidget->setLayout(chckBxLayout);
+    /*
     tmpQLabel = new QLabel("Set as default", this);
     tmpQLabel->setFixedHeight( tmpQLabel->sizeHint().height() );
     m_pMainGrid->addWidget(tmpQLabel, startRow+6, 0);
-
-    setDefaultConnChkBx = new QCheckBox(this);
+    */
+    setDefaultConnChkBx = new QCheckBox("Set as default connection", this);
+    hideSysDbsChkBx = new QCheckBox("Hide system databases", this);
+    hideSysDbsChkBx->setChecked(true);
     m_pMainGrid->addWidget(setDefaultConnChkBx, startRow+6, 1, 1, 2);
-
+    chckBxLayout->addWidget(setDefaultConnChkBx);
+    chckBxLayout->addWidget(hideSysDbsChkBx);
+    m_pMainGrid->addWidget(chckBxWidget, startRow+6, 0, 1, 2);
+    connect( hideSysDbsChkBx, SIGNAL(clicked()), SLOT(toggleSysDbs()) );
 
 
 
@@ -151,7 +174,7 @@ LoginBox::LoginBox( GDebug *pGDeb, QWidget* parent ): QDialog(parent)
 
     helpB = new QPushButton();
     connect( helpB, SIGNAL(clicked()), SLOT(helpClicked() ) );
-    helpB->setText( "Help" );
+    helpB->setText( "New/Edit" );
     helpB->setAutoRepeat( false );
     helpB->setFixedHeight( helpB->sizeHint().height() );
     buttonLayout->addWidget(helpB);
@@ -164,13 +187,13 @@ LoginBox::LoginBox( GDebug *pGDeb, QWidget* parent ): QDialog(parent)
 
     deb("Creating m_pConnSet");
     m_pConnSet = new ConnSet(m_pGDeb);
+    m_pConnSet->initConnSet();
     m_pIDSQL = NULL;
     initBox();
-
     resize( 270, 180 );
     QWidget * host = parent; //this->parentWidget();
     QRect hostRect = host->geometry();
-    this->move(hostRect.center() - this->rect().center());
+    //this->move(hostRect.center() - this->rect().center());
 }
 
 LoginBox::~LoginBox()
@@ -199,9 +222,9 @@ void LoginBox::runPluginCheck()
     {
         GString msg = "No plugins found in "+pluginPath+",\nplease navigate to the directory where the plugins are located.";
         #if defined(MAKE_VC) || defined (__MINGW32__)
-        msg += "\n\nValid plugins are db2dsql.dll, odbcdsql.dll, db2dcli.dll";
+        msg += "\n\nValid plugins are db2dsql.dll, odbcdsql.dll, db2dcli.dll, ...";
         #else
-        msg += "\nValid plugins are:\n\n libdb2dsql.so\n libodbcdsql.so\n libdb2dcli.so\n";
+        msg += "\nValid plugins are:\n\n libdb2dsql.so\n libodbcdsql.so\n libdb2dcli.so, ...\n";
         #endif
         QMessageBox::information(this, "Missing plugins", msg);
         QString path = QFileDialog::getExistingDirectory (this, "Plugin path");
@@ -213,6 +236,7 @@ void LoginBox::runPluginCheck()
 
 void LoginBox::initBox()
 {
+    disconnect(userNameCB, SIGNAL(activated(int)));
     disconnect(dbNameCB, SIGNAL(activated(int)));
     disconnect(hostNameCB, SIGNAL(activated(int)));
     disconnect(dbTypeCB, SIGNAL(activated(int)));
@@ -233,8 +257,8 @@ void LoginBox::initBox()
     }
     dbTypeCB->setFocus();
 
-
-    connect(dbNameCB, SIGNAL(activated(int)), SLOT(getConnData(int)));
+    connect(userNameCB, SIGNAL(activated(int)), SLOT(setUidAndPwd(int)));
+    connect(dbNameCB, SIGNAL(activated(int)), SLOT(getConnDataSlot(int)));
     connect(hostNameCB, SIGNAL(activated(int)), SLOT(getAllDatabases(int)));
     connect(dbTypeCB, SIGNAL(activated(int)), SLOT(getAllHosts()));
     setDefaultCon();
@@ -243,18 +267,13 @@ void LoginBox::initBox()
 void LoginBox::createPluginInfo()
 {
     deb("createPluginInfo start");
-    GSeq <GString> list;
+    GSeq <PLUGIN_DATA*> list;
     GString dbType;
     int rc;
     QSettings settings(_CFG_DIR, "pmf6");
 
-    DSQLPlugin::DBTypeNames(&list);
+    DSQLPlugin::PluginNames(&list);
 
-    for( int i = 1; i <= (int)list.numberOfElements(); ++i)
-    {
-        dbType = list.elementAtPosition(i);
-        deb(dbType);
-    }
 
     pInfoLBL = new QLabel("Binding....please wait...", this);
     pInfoLBL->setStyleSheet("color: red;");
@@ -297,7 +316,7 @@ void LoginBox::createPluginInfo()
     for( int i = 1; i <= (int)list.numberOfElements(); ++i)
     {
         QLabel *pLBL;
-        dbType = list.elementAtPosition(i);
+        dbType = list.elementAtPosition(i)->Type;
         DSQLPlugin dsql(dbType);
 
         rc = dsql.loadError();
@@ -310,7 +329,7 @@ void LoginBox::createPluginInfo()
         }
         else if( dbType == _PGSQLCLI ) continue;
         else if( rc == PluginMissing ) pLBL = new QLabel(dbType+": Plugin missing.", this);
-        else pLBL = new QLabel(dbType+": Plugin not loadable, click Help", this);
+        else pLBL = new QLabel(dbType+": Plugin not loadable, click New/Edit", this);
 
         pLBL->setTextFormat(Qt::RichText);
         pLBL->setFrameStyle( QFrame::Panel | QFrame::Sunken );
@@ -320,27 +339,61 @@ void LoginBox::createPluginInfo()
         m_pMainGrid->addWidget(pLBL, m_pMainGrid->rowCount()+1, 0, 1, 3);
         //m_pMainGrid->addWidget(pLBL, i-1, 0, 1, 3);
     }
+    PLUGIN_DATA* plg;
+    for(int i = 1; i <= (int)list.numberOfElements(); ++i)
+    {
+        plg = list.elementAtPosition(i);
+        delete plg;
+    }
+
 }
 
+void LoginBox::toggleSysDbs()
+{
+    getAllDatabases(0);
+}
 
+void LoginBox::togglePwdClicked()
+{
+    QPixmap pixmap3(":eye3.png.piko");
+    QPixmap pixmap2(":eye2.png.piko");
+
+    if( passWordLE->echoMode() == QLineEdit::Password)
+    {
+        QIcon ButtonIcon(pixmap2);
+        viewPwdB->setIcon(ButtonIcon);
+        viewPwdB->setIconSize(QSize(16,16));
+        passWordLE->setEchoMode(QLineEdit::Normal);
+    }
+    else
+    {
+        QIcon ButtonIcon(pixmap3);
+        viewPwdB->setIcon(ButtonIcon);
+        viewPwdB->setIconSize(QSize(16,16));
+        passWordLE->setEchoMode(QLineEdit::Password);
+    }
+}
 
 void LoginBox::okClicked()
 {
     deb("LoginBox, okClicked Start");
+
     if( GString(dbTypeCB->currentText()) == _selStringCB)
     {        
         dbTypeCB->setFocus();
         return;
     }
+    GString pwdCmd;
     m_pIDSQL = new DSQLPlugin(dbTypeCB->currentText());
     m_pIDSQL->setGDebug(m_pGDeb);
-    if( dbNameCB->currentText() == LGNBOX_CREATE_NODE )
-    {
-        CatalogDB foo(m_pIDSQL, this);
-        foo.exec();
-        if( foo.catalogChanged() ) initBox();
-        return;
-    }
+//    if( dbNameCB->currentText() == LGNBOX_CREATE_NODE )
+//    {
+//        CatalogDB foo(m_pIDSQL, this);
+//        foo.createDisplay();
+//        foo.exec();
+//        if( foo.catalogChanged() ) initBox();
+//        return;
+//    }
     if( dbNameCB->currentText() == LGNBOX_RUN_STARTUP )
     {
         runAutoCatalog();
@@ -348,11 +401,11 @@ void LoginBox::okClicked()
     }
 
     if( dbNameCB->currentText() == LGNBOX_HELP) return;
-    if( hostNameCB->currentText() == LGNBOX_FIND_DATABASES )
-    {
-        findDatabases();
-        return;
-    }
+//    if( hostNameCB->currentText() == LGNBOX_FIND_DATABASES )
+//    {
+//        findDatabases();
+//        return;
+//    }
 
     if(m_pIDSQL == NULL || !m_pIDSQL->isOK() )
     {
@@ -361,12 +414,34 @@ void LoginBox::okClicked()
     }	
     dbType   = dbTypeCB->currentText();
     dbName   = dbNameCB->currentText();
-	userName = userNameLE->text();
-	passWord = passWordLE->text();
+    userName = userNameCB->currentText();
     hostName = getHost(hostNameCB->currentText());
-    //hostName = hostNameCB->currentText();
     port     = getPort(hostNameCB->currentText());
+    options = "";
 
+    CON_SET * pCS;
+    pCS = m_pConnSet->findConnSet(dbType, dbName, hostName, port, userName);
+    if( pCS )
+    {
+        pwdCmd = pCS->PwdCmd;
+        options = pCS->Options;
+        deb("pwdCmd: "+pwdCmd);
+    }
+    if( pwdCmd.strip().length() )
+    {
+        GString err;
+        Helper::runCommandInProcess(pwdCmd, passWord, err);
+        passWord = passWord.stripTrailing('\r').stripTrailing('\n').stripTrailing('\r');
+        deb("from runCommandInProcess: cmd: "+pwdCmd+", err: "+err+", pwd: "+passWord);
+        passWord = passWord.stripTrailing('\r').stripTrailing('\n').stripTrailing('\r');
+        if( err.length() )
+        {
+            msg("Cmd "+pwdCmd+" gave error: \n"+err);
+            return;
+        }
+        passWordLE->setText(passWord);
+    }
+    else passWord = passWordLE->text();
     if( dbName.length() == 0 && GString(dbTypeCB->currentText()) != _MARIADB  ) return;
 
     m_pIDSQL->disconnect();
@@ -388,7 +463,8 @@ void LoginBox::okClicked()
         }
     }
 
-    erc = bindAndConnect(m_pIDSQL, dbName, userName, passWord, hostName, port);
+
+    erc = bindAndConnect(m_pIDSQL, dbName, userName, passWord, hostName, port, options, pwdCmd);
     if( erc  )
     {
         if( (erc == -1097 ||erc == -1027) && (m_pIDSQL->getDBType() == DB2 || m_pIDSQL->getDBType() == DB2ODBC ) )
@@ -407,7 +483,6 @@ void LoginBox::okClicked()
                 initBox();
             }
         }
-
         if( (erc == -1013 )  && (m_pIDSQL->getDBType() == DB2 || m_pIDSQL->getDBType() == DB2ODBC ) )
         {
             if( QMessageBox::question(this, "PMF", "Do you want to remove this entry from the list of known databases?", QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes )
@@ -425,6 +500,7 @@ void LoginBox::okClicked()
     else if( dbName != LGNBOX_HELP )
     {
         CON_SET * pCS = new CON_SET;
+        pCS->init();
         pCS->DefDB = 0;
         pCS->Type = dbTypeCB->currentText();
         pCS->DB = dbName;
@@ -432,6 +508,7 @@ void LoginBox::okClicked()
         pCS->UID = userName;
         pCS->Port = port;
         pCS->PWD = passWord;
+        pCS->PwdCmd = pwdCmd;
         //pCS->CltEnc = "";
 
         int rc = m_pConnSet->isInList(pCS);
@@ -441,10 +518,11 @@ void LoginBox::okClicked()
             {
                 m_pConnSet->addToList(pCS);                
                 deb("LoginBox, okClicked connset saved ok");
-                for(int i = 0; i < dbNameCB->count(); ++i )
-                {
-                    if( pCS->Type == _POSTGRES && dbNameCB->itemText(i) != LGNBOX_FIND_DATABASES) m_pConnSet->addToList(dbTypeCB->currentText(), dbNameCB->itemText(i), hostName, userName, passWord, port);
-                }
+//                for(int i = 0; i < dbNameCB->count(); ++i )
+//                {
+//                    //if( pCS->Type == _POSTGRES && dbNameCB->itemText(i) != LGNBOX_FIND_DATABASES)
+//                    m_pConnSet->addToList(dbTypeCB->currentText(), dbNameCB->itemText(i), hostName, userName, passWord, port, "");
+//                }
                 m_pConnSet->save();
 
             }
@@ -463,12 +541,20 @@ void LoginBox::okClicked()
         deb("LoginBox, deleting closing...");
         close();
     }
-    if( dbName == LGNBOX_FIND_DATABASES ) close();
+    //if( dbName == LGNBOX_FIND_DATABASES ) close();
 
     GString encoding = SelectEncoding::getEncoding(m_pIDSQL);
+#ifdef MAKE_VC
+    if( !encoding.length() ) m_pIDSQL->setEncoding("WIN1252");
+#endif
     deb("calling setEncoding: "+encoding);
     m_pIDSQL->setEncoding(encoding);
+    GKeyVal gkv;
+    gkv.readFromFile(lastConnDataSettings());
+    gkv.addOrReplace(GString(dbTypeCB->currentText())+GString(hostNameCB->currentText()), dbName);
+    gkv.toFile(lastConnDataSettings());
     deb("LoginBox, okClicked end");
+
 }
 
 
@@ -514,6 +600,27 @@ void LoginBox::helpClicked()
 //    OdbcMdf * pOdbcMdf = new OdbcMdf(m_pGDeb, this);
 //    pOdbcMdf->show();
 //    return;
+    NewConn* foo = new NewConn(this, m_pGDeb);
+    foo->exec();
+    GString selDb = foo->lastSelectedDbType();
+    delete foo;
+    m_pConnSet->initConnSet();
+
+    int pos = dbTypeCB->findText(selDb);
+    if( pos != -1 )
+    {
+        dbTypeCB->setCurrentIndex(pos);
+    }
+    else
+    {
+        dbTypeCB->setCurrentIndex(0);
+    }
+    getAllHosts();
+
+    dbTypeCB->setFocus();
+
+    return;
+
 
     QDialog * helpVw = new QDialog(this);
     QTextBrowser* browser = new QTextBrowser();
@@ -541,7 +648,7 @@ void LoginBox::cancelClicked()
 void LoginBox::getAllHosts()
 {
     deb("getAllDatabases start");
-    userNameLE->setText("");
+    userNameCB->clear();
     passWordLE->setText("");
     hostNameCB->clear();
     dbNameCB->clear();
@@ -572,7 +679,7 @@ void LoginBox::getAllDatabases(int pos)
 {
     PMF_UNUSED(pos);
     deb("getAllDatabases start");
-    userNameLE->setText("");
+    userNameCB->clear();
     passWordLE->setText("");
     dbNameCB->clear();
 
@@ -598,6 +705,28 @@ void LoginBox::getAllDatabases(int pos)
     fillDbNameCB(hostNameCB->currentText());
 }
 
+void LoginBox::addDbNameToComboBox(GString dbName)
+{
+    if( !hideSysDbsChkBx->isChecked() )
+    {
+        dbNameCB->addItem(dbName);
+        return;
+    }
+    GString dbType = dbTypeCB->currentText();
+    if( dbType == _MARIADB )
+    {
+        if( dbName == "performance_schema" || dbName == "sys" ) return;
+    }
+    else if( dbType == _POSTGRES )
+    {
+        if( dbName == "template0" || dbName == "template1" )
+        {
+            return;
+        }
+    }
+    dbNameCB->addItem(dbName);
+}
+
 void LoginBox::fillDbNameCB(GString host)
 {
     deb("fillDbNameCB, start");
@@ -613,30 +742,30 @@ void LoginBox::fillDbNameCB(GString host)
     {
         deb("In seq, host: "+seqConSet.elementAtPosition(i)->Host+", db: "+seqConSet.elementAtPosition(i)->DB+", port: "+seqConSet.elementAtPosition(i)->Port);
         pCS = seqConSet.elementAtPosition(i);
-        if( pCS->Host == hostName && pCS->Port == port || host == LGNBOX_ALL_DATABASES)
+        if( (pCS->Host == hostName && pCS->Port == port) || host == LGNBOX_ALL_DATABASES)
         {
-            sortSeq.add(pCS->DB);
+            if( !sortSeq.contains(pCS->DB)) sortSeq.add(pCS->DB);
             deb("in seq: "+pCS->DB);
         }
     }
     sortSeq.sort();
     deb("fillDbNameCB, sorting done");
     for( unsigned long i = 1; i <= sortSeq.numberOfElements(); ++i )
-    {
-        dbNameCB->addItem(sortSeq.elementAtPosition(i));
+    {        
+        addDbNameToComboBox(sortSeq.elementAtPosition(i));
+        //dbNameCB->addItem(sortSeq.elementAtPosition(i));
+
     }
     if( seqConSet.numberOfElements() == 0 )
     {
         if( GString(dbTypeCB->currentText()) == _MARIADB )
         {
             dbNameCB->addItem(LGNBOX_MARIADB);
-            //portLE->setText("3306");
         }
         else if( GString(dbTypeCB->currentText()) == _POSTGRES )
-        {
+        {            
             dbNameCB->clear();
             dbNameCB->addItem("");
-            //portLE->setText("5432");
         }
         else dbNameCB->addItem(LGNBOX_HELP);
     }
@@ -645,13 +774,21 @@ void LoginBox::fillDbNameCB(GString host)
         DBAPIPlugin* pApi = new DBAPIPlugin(dbTypeCB->currentText());
         if( pApi->isValid() )
         {
-            dbNameCB->addItem(LGNBOX_CREATE_NODE);
+            //dbNameCB->addItem(LGNBOX_CREATE_NODE);
             if( haveStartupFile() ) dbNameCB->addItem(LGNBOX_RUN_STARTUP);
         }
         delete pApi;
     }
     deb("fillDbNameCB, calling getConnData(0)");
-    getConnData(0);
+    GKeyVal gkv;
+    gkv.readFromFile(lastConnDataSettings());
+    GString lastDB = gkv.getValForKey(GString(dbTypeCB->currentText())+GString(hostNameCB->currentText()));
+    int pos = dbNameCB->findText(lastDB);
+    if( pos != -1 && lastDB.length() )
+    {
+        dbNameCB->setCurrentIndex(pos);
+    }
+    getConnDataSlot(0);
 }
 
 void LoginBox::fillHostNameCB(GString dbType)
@@ -681,10 +818,10 @@ void LoginBox::fillHostNameCB(GString dbType)
     {
         hostNameCB->setCurrentIndex(0);
     }
-    if( GString(dbTypeCB->currentText()) == _POSTGRES || GString(dbTypeCB->currentText()) == _MARIADB )
-    {
-        hostNameCB->addItem(LGNBOX_FIND_DATABASES);
-    }
+//    if( GString(dbTypeCB->currentText()) == _POSTGRES || GString(dbTypeCB->currentText()) == _MARIADB )
+//    {
+//        hostNameCB->addItem(LGNBOX_FIND_DATABASES);
+//    }
     getAllDatabases(0);
 
 }
@@ -709,9 +846,9 @@ int LoginBox::nodeNameHasChanged(GString alias, GString hostName)
             if( QMessageBox::question(this, "PMF", "The node for this database appears to have changed to '"+pCS->Host+"'\nSet this node?", QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes )
             {
                 hostNameCB->addItem(pCS->Host);
-                userNameLE->setText("");
+                userNameCB->clear();
                 passWordLE->setText("");
-                userNameLE->setFocus();
+                userNameCB->setFocus();
                 return 1;
             }
             break;
@@ -727,7 +864,7 @@ void LoginBox::setDefaultCon()
     int pos;
     if( m_pConnSet->errorMessages().length() ) msg(m_pConnSet->errorMessages()+"\n\nCheck your client configuration, maybe try connecting in a shell.\nOr run PMF as Admin");
 
-    getConnData(0);
+    getConnDataSlot(0);
     getAllDatabases(0);
 
     CON_SET* pCS = m_pConnSet->getDefaultCon();
@@ -757,10 +894,22 @@ void LoginBox::setDefaultCon()
         if( pos < 0 ) pos = 0;
         dbNameCB->setCurrentIndex(pos);
     }
-    if( pCS->UID.length() ) userNameLE->setText(pCS->UID);
-    else userNameLE->setText("");
-    if( pCS->PWD.length() ) passWordLE->setText(pCS->PWD);
-    else passWordLE->setText("");
+    if( pCS->UID.length() )
+    {
+        pos = userNameCB->findText(pCS->UID);
+        if( pos < 0 ) userNameCB->clear();
+        else userNameCB->setCurrentIndex(pos);
+    }
+    else userNameCB->clear();
+    if( pCS->PwdCmd.length())
+    {
+        GString txt = pCS->PWD;
+        txt += " ["+pCS->PwdCmd+"]";
+        passWordLE->setText(txt);
+    }
+    else passWordLE->setText(pCS->PWD);
+    passWordLE->setText(pCS->PWD);
+
 
 
     //pos = hostNameCB->findText(pCS->Host);
@@ -779,11 +928,11 @@ void LoginBox::findDatabases()
 {
     GString host = getHost(hostNameCB->currentText());
 
-    if( host != LGNBOX_FIND_DATABASES ) return;
-
+    //if( host != LGNBOX_FIND_DATABASES ) return;
 
     GSeq <CON_SET*> conSetList;
-    AddDatabaseHost * pAddHost = new AddDatabaseHost(m_pIDSQL, &conSetList);
+    AddDatabaseHost * pAddHost = new AddDatabaseHost(m_pIDSQL, &conSetList, this);
+    pAddHost->CreateDisplay();
     pAddHost->exec();
     delete pAddHost;
     if( conSetList.numberOfElements() == 0 ) return;
@@ -794,8 +943,13 @@ void LoginBox::findDatabases()
     deb("getConnData, getting databases, found "+GString(conSetList.numberOfElements())+" databases.");    
     CON_SET* pCS = conSetList.elementAtPosition(1);
     hostNameCB->addItem(pCS->Host+":"+pCS->Port);
-    userNameLE->setText(pCS->UID);
+    userNameCB->findText(pCS->UID);
+    if( pCS->PwdCmd.length() )passWordLE->setText(pCS->PwdCmd);
+    else passWordLE->setText(pCS->PWD);
     passWordLE->setText(pCS->PWD);
+
+
+     //Helper::runStuffInProcess("C:\\Client_Tools\\Powershell\\pwsh.exe -File \"C:\\Client_Tools\\tools\\ad_connect.ps1\"");
     //hostNameCB->addItem(LGNBOX_FIND_DATABASES);
 
     int saveCon = 0;
@@ -807,7 +961,7 @@ void LoginBox::findDatabases()
         if( saveCon)
         {
             pCS = conSetList.elementAtPosition(i);
-            m_pConnSet->addToList(dbTypeCB->currentText(), pCS->DB.strip("\'"), pCS->Host, pCS->UID, pCS->PWD, pCS->Port);
+            m_pConnSet->addToList(dbTypeCB->currentText(), pCS->DB.strip("\'"), pCS->Host, pCS->UID, pCS->PWD, pCS->Port, pCS->PwdCmd, "", "");
         }
     }    
     m_pConnSet->save();
@@ -820,23 +974,57 @@ void LoginBox::findDatabases()
     return;
 }
 
-
-void LoginBox::getConnData(int pos)
+void LoginBox::setUidAndPwd(int pos)
 {
     deb("getConnData, start");
     PMF_UNUSED(pos);
-    GString dbType = dbTypeCB->currentText();
-    GString dbName = dbNameCB->currentText();
-    GString uid = userNameLE->text();
 
-    CON_SET * pCS = m_pConnSet->getConSet(dbType, dbName);
-    if( pCS )
+    passWordLE->setText("");
+    GString dbName = dbNameCB->currentText();
+    GString uid = userNameCB->currentText();
+    GSeq <CON_SET*> seqConSet;
+    CON_SET * pCS;
+    m_pConnSet->getStoredCons(dbTypeCB->currentText(), &seqConSet);
+    for( int i = 1; i <= seqConSet.numberOfElements(); ++i )
     {
-        //hostNameCB->setText(pCS->Host);
-        //portLE->setText(pCS->Port);
-        userNameLE->setText(pCS->UID);
-        passWordLE->setText(pCS->PWD);
+        pCS = seqConSet.elementAtPosition(i);
+        if( pCS->DB == dbName && pCS->UID == uid)
+        {
+            if( pCS->PwdCmd.length() )passWordLE->setText(pCS->PwdCmd);
+            else passWordLE->setText(pCS->PWD);
+            passWordLE->setText(pCS->PWD);
+        }
     }
+}
+void LoginBox::getConnDataSlot(int pos)
+{
+    deb("getConnData, start");
+    PMF_UNUSED(pos);
+
+    userNameCB->clear();
+    GString dbName = dbNameCB->currentText();
+
+    GSeq <CON_SET*> seqConSet;
+    CON_SET * pCS;
+    m_pConnSet->getStoredCons(dbTypeCB->currentText(), &seqConSet);
+    for( int i = 1; i <= seqConSet.numberOfElements(); ++i )
+    {
+        pCS = seqConSet.elementAtPosition(i);
+        if( pCS->DB == dbName )
+        {
+            userNameCB->addItem(pCS->UID);
+        }
+    }
+    setUidAndPwd(0);
+
+//    CON_SET * pCS = m_pConnSet->getConSet(dbType, dbName);
+//    if( pCS )
+//    {
+//        //hostNameCB->setText(pCS->Host);
+//        //portLE->setText(pCS->Port);
+//        userNameCB->setCurrentText(pCS->UID);
+//        passWordLE->setText(pCS->PWD);
+//    }
 }
 GString LoginBox::Port()
 {
@@ -875,26 +1063,23 @@ void LoginBox::deb(GString msg)
 int LoginBox::checkPlugins(GString pluginPath)
 {
 	pluginPath = pluginPath.stripTrailing("/") + "/";
-    #if defined(MAKE_VC) || defined (__MINGW32__)
-    if( _access(pluginPath+"db2dsql.dll", 0) >= 0 ) return 0;
-    else if( _access(pluginPath+"odbcdsql.dll", 0) >= 0 ) return 0;
-    else if( _access(pluginPath+"db2dcli.dll", 0) >= 0 ) return 0;
-    //else if( _access(pluginPath+"pgsqlcli.dll", 0) >= 0 ) return 0;
-    else if( _access(pluginPath+"mariadb.dll", 0) >= 0 ) return 0;
-    else if( _access(pluginPath+"postgres.dll", 0) >= 0 ) return 0;
-	#else
-	if( access(pluginPath+"libdb2dsql.so", 0) >= 0 ) return 0;
-	else if( access(pluginPath+"libodbcdsql.so", 0) >= 0 ) return 0;
-    else if( access(pluginPath+"libdb2dcli.so", 0) >= 0 ) return 0;
-    //else if( access(pluginPath+"libpgsqlcli.so", 0) >= 0 ) return 0;
-    else if( access(pluginPath+"libmariadb.so", 0) >= 0 ) return 0;
-    else if( access(pluginPath+"libpostgres.so", 0) >= 0 ) return 0;
-	#endif    
-	return 1;
+
+    GSeq <PLUGIN_DATA*> list;
+    DSQLPlugin::PluginNames(&list);
+    for( int i = 1; i <= list.numberOfElements(); ++i )
+    {
+        GString libName = list.elementAtPosition(i)->PluginName;
+        #if defined(MAKE_VC) || defined (__MINGW32__)
+        if( _access(pluginPath+libName, 0) >= 0 ) return 0;
+        #else
+        if( access(pluginPath+libName, 0) >= 0 ) return 0;
+        #endif
+    }
+        return 1;
 }
 
 
-int LoginBox::bindAndConnect(DSQLPlugin *pDSQL, GString db, GString uid, GString pwd, GString node, GString port)
+int LoginBox::bindAndConnect(DSQLPlugin *pDSQL, GString db, GString uid, GString pwd, GString node, GString port, GString options, GString pwdCmd)
 {
     if( db == LGNBOX_MARIADB ) db = "";
     deb("bindAndConnect start.");
@@ -907,12 +1092,15 @@ int LoginBox::bindAndConnect(DSQLPlugin *pDSQL, GString db, GString uid, GString
     cs.PWD = pwd;
     cs.Host = node;
     cs.Port = port;
+    cs.Options = options;
+    cs.PwdCmd = pwdCmd;
     //GString err = pDSQL->connect(db, uid, pwd, node, port);
     GString err = pDSQL->connect(&cs);
     pDSQL->commit();
     if( err.length() )
     {
-        msg(err);
+        if( pwdCmd.length())  msg(err+"\n\nNote: You have set '"+pwdCmd+"' for this connection.\nPlease check this script for errors.");
+        else msg(err);
         return pDSQL->sqlCode() == 0 ? -1 : pDSQL->sqlCode();
     }
     deb("bindAndConnect ret on NOT DB...");
@@ -1033,7 +1221,6 @@ void LoginBox::runAutoCatalog()
     int count = outXml.countBlocks("Add");
     for(int i=1; i <= count; ++i )
     {
-        printf("Block at pos %i: %s\n", i, (char*) outXml.getBlockAtPosition("Add", i) .toString());
         CATALOG_DB cDB;
         cDB.Alias = outXml.getBlockAtPosition("Add", i).getAttribute("dbAlias");
         cDB.Database = outXml.getBlockAtPosition("Add", i).getAttribute("dbName");
@@ -1048,7 +1235,6 @@ void LoginBox::runAutoCatalog()
     count = outXml.countBlocks("Remove");
     for(int i=1; i <= count; ++i )
     {
-        printf("Block at pos %i: %s\n", i, (char*) outXml.getBlockAtPosition("Remove", i) .toString());
         CATALOG_DB cDB;
         cDB.Alias = outXml.getBlockAtPosition("Remove", i).getAttribute("dbAlias");
         int erc = CatalogDB::uncatalogDb(&cDB);
@@ -1084,3 +1270,5 @@ GString LoginBox::getHost(GString in)
     return in.subString(1, in.indexOf(":")-1).strip();
 
 }
+
+

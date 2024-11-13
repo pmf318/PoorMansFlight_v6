@@ -26,6 +26,10 @@ unix{
 ## Qt5 doc mentions this, but at least for now it's apparently not needed.
 #CONFIG+=create_prl
 
+IS_MSVC_STATIC = $$(MSVC_STATIC)
+!isEmpty(IS_MSVC_STATIC){
+	DEFINES += MSVC_STATIC_BUILD
+}
 
 ### from qt5 up
 QT += widgets
@@ -84,6 +88,10 @@ win32-msvc{
     LIBS += ../../lib/glengineQT.lib
     QMAKE_POST_LINK+=del "..\..\..\plugins\dbTemplate.exp"
 	QMAKE_POST_LINK+=del "..\..\..\plugins\dbTemplate.lib"		
+	!isEmpty(IS_MSVC_STATIC){
+		CONFIG+=STATIC
+		DEFINES += STATIC	
+	}
 	
 }
    

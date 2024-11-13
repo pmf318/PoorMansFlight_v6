@@ -132,7 +132,7 @@ mariaDB::mariaDB()
     m_strUID ="";
     m_strPWD = "";
     m_strHost = "localhost";
-    m_strPort = 3306;
+    m_strPort = "3306";
     m_strCltEnc = "";
     m_pGDB = NULL;
     m_strLastSqlSelectCommand = "";
@@ -181,7 +181,7 @@ GString mariaDB::connect(GString db, GString uid, GString pwd, GString host, GSt
     m_strPWD = pwd;
     m_strNode = host;
     m_strHost = host;
-    m_strPort = port.asInt();
+    m_strPort = port;
     m_strCltEnc = "";
     deb("::connect, connection data: "+m_strDB+", uid: "+m_strUID+", host: "+host+", port: "+GString(port));
 
@@ -200,6 +200,10 @@ GString mariaDB::connect(CON_SET * pCs)
     return this->connect(pCs->DB, pCs->UID, pCs->PWD, pCs->Host, pCs->Port);
 }
 
+GString mariaDB::reconnect(CON_SET *pCS)
+{
+    return connect(m_strDB, m_strUID, m_strPWD, m_strHost, m_strPort);
+}
 
 int mariaDB::disconnect()
 {	
@@ -210,7 +214,7 @@ int mariaDB::disconnect()
     m_mariaSql = mysql_init(NULL);
 	return 0;
 }
-GString mariaDB::initAll(GString message, unsigned long maxRows,  int getLen)
+GString mariaDB::initAll(GString message, long maxRows,  int getLen)
 {    
     deb("::initAll, start. msg: "+message);
     deb("::initAll, connecting...");
@@ -261,7 +265,7 @@ GString mariaDB::initAll(GString message, unsigned long maxRows,  int getLen)
             else pRow->addElement("'"+GString(row[i])+"'");
         }
         m_iNumberOfRows++;
-        if( maxRows > 0 && m_iNumberOfRows > maxRows ) break;
+        if( maxRows >= 0 && m_iNumberOfRows > maxRows ) break;
         allRowsSeq.add( pRow );
     }
     if(res != NULL) mysql_free_result(res);
@@ -850,6 +854,7 @@ int mariaDB::getDataBases(GSeq <CON_SET*> *dbList)
     for( int i = 1; i <= this->numberOfRows(); ++i )
     {
         pCS = new CON_SET;
+        pCS->init();
         pCS->DB = this->rowElement(i, 1);
         deb("getDataBases, got "+pCS->DB);
         pCS->Host = m_strNode;

@@ -101,7 +101,8 @@ private:
    void addWordsToSeq(GString line);
    void createCommands();
    void infoText(int color, GString text = "");
-   void createCommandsForTerminator();
+   void createCommandsForTerminator(GString termChar = "");
+   int isDollarQuoted();
    GSeq <GString> m_seqAllWords;
    GSeq <GString> m_seqAllCmds;
    

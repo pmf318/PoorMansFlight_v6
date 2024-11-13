@@ -1,5 +1,6 @@
 
 #include "xmlEdit.h"
+#include "helper.h"
 #include <QDomDocument>
 #include <QMessageBox>
 #include <QMimeData>
@@ -10,13 +11,13 @@
 
 #include "helper.h"
 
-static const QColor DEFAULT_SYNTAX_CHAR		= Qt::blue;
-static const QColor DEFAULT_ELEMENT_NAME	= Qt::darkRed;
-static const QColor DEFAULT_COMMENT			= Qt::darkGreen;
-static const QColor DEFAULT_ATTRIBUTE_NAME	= Qt::red;
-static const QColor DEFAULT_ATTRIBUTE_VALUE	= Qt::blue;
-static const QColor DEFAULT_ERROR			= Qt::darkMagenta;
-static const QColor DEFAULT_OTHER			= Qt::black;
+QColor DEFAULT_SYNTAX_CHAR		= Qt::blue;
+QColor DEFAULT_ELEMENT_NAME		= Qt::darkRed;
+QColor DEFAULT_COMMENT			= Qt::darkGreen;
+QColor DEFAULT_ATTRIBUTE_NAME	= Qt::red;
+QColor DEFAULT_ATTRIBUTE_VALUE	= Qt::blue;
+QColor DEFAULT_ERROR			= Qt::darkMagenta;
+QColor DEFAULT_OTHER			= Qt::black;
 
 // Regular expressions for parsing XML borrowed from:
 // http://www.cs.sfu.ca/~cameron/REX.html
@@ -27,19 +28,19 @@ static const QString EXPR_ATTRIBUTE_VALUE	= "\"[^<\"]*\"|'[^<']*'";
 static const QString EXPR_NAME				= "([A-Za-z_:]|[^\\x00-\\x7F])([A-Za-z0-9_:.-]|[^\\x00-\\x7F])*"; 
 
 
-XmlEdit::XmlHighlighter::XmlHighlighter(QObject* parent, int useColorScheme )
+XmlEdit::XmlHighlighter::XmlHighlighter(QObject* parent, PmfColorScheme useColorScheme )
 : QSyntaxHighlighter(parent)
 {
     init(useColorScheme);
 }
 
-XmlEdit::XmlHighlighter::XmlHighlighter(QTextDocument* parent, int useColorScheme )
+XmlEdit::XmlHighlighter::XmlHighlighter(QTextDocument* parent, PmfColorScheme useColorScheme )
 : QSyntaxHighlighter(parent)
 {
     init(useColorScheme);
 }
 
-XmlEdit::XmlHighlighter::XmlHighlighter(QTextEdit* parent, int useColorScheme )
+XmlEdit::XmlHighlighter::XmlHighlighter(QTextEdit* parent, PmfColorScheme useColorScheme )
 : QSyntaxHighlighter(parent)
 {
     init(useColorScheme);
@@ -49,10 +50,23 @@ XmlEdit::XmlHighlighter::~XmlHighlighter()
 {
 }
 
-void XmlEdit::XmlHighlighter::init(int useColorScheme)
+void XmlEdit::XmlHighlighter::setDarkColors()
+{
+	DEFAULT_SYNTAX_CHAR		= Qt::white;
+	DEFAULT_ELEMENT_NAME	= Qt::red;
+	DEFAULT_COMMENT			= Qt::darkGreen;
+	DEFAULT_ATTRIBUTE_NAME	= Qt::cyan;
+	DEFAULT_ATTRIBUTE_VALUE	= Qt::gray;
+	DEFAULT_ERROR			= Qt::darkMagenta;
+	DEFAULT_OTHER			= Qt::white;	
+}	
+
+void XmlEdit::XmlHighlighter::init(PmfColorScheme useColorScheme)
 {    
 	m_parent = NULL;
-    if( !useColorScheme ) return;
+    //if( !useColorScheme ) return;
+	printf("XmlEdit::XmlHighlighter: checking darkMode: %i\n", Helper::isSystemDarkPalette());
+	if( Helper::isSystemDarkPalette() ) setDarkColors();
 	fmtSyntaxChar.setForeground(DEFAULT_SYNTAX_CHAR);
     fmtElementName.setForeground(DEFAULT_ELEMENT_NAME);
 	fmtComment.setForeground(DEFAULT_COMMENT);
@@ -399,7 +413,7 @@ void XmlEdit::XmlHighlighter::setParent(QWidget * parent)
 ************************************************************************/
 
 
-XmlEdit::XmlEdit(QWidget *parent, int colorScheme)
+XmlEdit::XmlEdit(QWidget *parent, PmfColorScheme colorScheme)
 {
   m_parent = parent;
   m_iColorScheme = colorScheme;
@@ -472,6 +486,7 @@ QString XmlEdit::partialXml(int requireNode)
     GString selection = selectedText();
     if( !selection.length() ) return "";
     int pos = cursor.position();
+    printf("cursorPos: %i\n", pos);
     int startTagPos = pos - selection.length() - 1; //Search "<" in front of selection
     if( startTagPos >= 0 && requireNode )
     {
@@ -484,10 +499,13 @@ QString XmlEdit::partialXml(int requireNode)
 
 
     int end1 = text().indexOf(">", pos);
-    int end2 = text().indexOf("</", pos);
+    //What was I thinking? Honestly, no idea.
+    //int end2 = text().indexOf("</", pos);
+    int end2 = text().indexOf("/>", pos);
     int endPos = pmf_min(end1, end2);
     QString qtxt = text().mid(0, endPos )+"/>";
     GString s = qtxt;
+    printf("end1: %i, end2: %i, endPos: %i, txt: %s\n", end1, end2, endPos, (char*) s);
     return qtxt;
 }
 

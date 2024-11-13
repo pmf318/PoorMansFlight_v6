@@ -75,5 +75,10 @@ public:
    VCExport   KEY_VAL *elementAtPosition(int idx);
    VCExport   GString getValForKey(GString key);
    VCExport   int hasKey(GString key);
+   VCExport   int toFile(GString fileName);
+   VCExport   int readFromFile(GString fileName);
+   VCExport   int replaceValue(GString key, GString value);
+   VCExport   void addOrReplace(GString key, GString value);
+
 };
 #endif

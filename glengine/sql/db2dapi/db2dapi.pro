@@ -34,6 +34,11 @@ unix{
 ### from qt5 up
 QT += widgets
 
+IS_MSVC_STATIC = $$(MSVC_STATIC)
+!isEmpty(IS_MSVC_STATIC){
+	DEFINES += MSVC_STATIC_BUILD
+}
+
 
 CONFIG+=plugin
 
@@ -109,6 +114,11 @@ win32-msvc{
 		LIBS += WS2_32.lib user32.lib
 		LIBS += ../../lib/glengineQT.lib
 	}
+	!isEmpty(IS_MSVC_STATIC){
+		CONFIG+=STATIC
+		DEFINES += STATIC	
+	}
+	
 }
    
 win32{

@@ -170,7 +170,7 @@ public:                              // Public section
     VCExport GString connect(GString db, GString uid, GString pwd, GString host = "localhost", GString port = "3306");
     VCExport GString connect(CON_SET * pCs);
     VCExport int disconnect();
-    VCExport GString initAll(GString message, unsigned long maxRows = 0, int getLen = 0);
+    VCExport GString initAll(GString message, long maxRows = -1, int getLen = 0);
     VCExport int commit();
     VCExport int rollback();
     VCExport unsigned int  numberOfColumns();
@@ -299,6 +299,7 @@ public:                              // Public section
     VCExport GString allPurposeFunction(GKeyVal * pKeyVal){ return "";}
     VCExport GString setEncoding(GString encoding);
     VCExport void getAvailableEncodings(GSeq<GString> *encSeq);
+    VCExport GString reconnect(CON_SET *pCS);
 };
 
 #endif

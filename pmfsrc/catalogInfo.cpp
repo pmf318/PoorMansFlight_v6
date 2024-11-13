@@ -31,15 +31,29 @@
 CatalogInfo::CatalogInfo(DSQLPlugin* pDSQL, QWidget *parent)  :QDialog(parent) //, f("Charter", 48, QFont::Bold)
 {
     m_pIDSQL = pDSQL;
+    m_pParent = parent;
+}
 
+CatalogInfo::~CatalogInfo()
+{
+    if( pApi ) delete pApi;
+}
+
+void CatalogInfo::createDisplay(int mode)
+{
+    m_iMode = mode;
     this->resize(680, 400);
     setWindowTitle("Databases");
     QGridLayout * grid = new QGridLayout( this );
     info = new QLabel(this);
 
     grid->addWidget(info, 0, 0, 1, 5);
-    ok = new QPushButton("Exit", this);
-    ok->setDefault(true);
+    if( m_iMode == ADD_CATINFO_MODE_NORM )
+    {
+        ok = new QPushButton("Exit", this);
+        ok->setDefault(true);
+        connect(ok, SIGNAL(clicked()), SLOT(OKClicked()));
+    }
     newB = new QPushButton("Catalog DB/Node", this);
     uncNodeB = new QPushButton("Uncatalog Node", this);
     uncDatabaseB = new QPushButton("Uncatalog DB", this);
@@ -47,11 +61,11 @@ CatalogInfo::CatalogInfo(DSQLPlugin* pDSQL, QWidget *parent)  :QDialog(parent) /
     connect(newB, SIGNAL(clicked()), SLOT(newClicked()));
     connect(uncNodeB, SIGNAL(clicked()), SLOT(uncNodeClicked()));
     connect(uncDatabaseB, SIGNAL(clicked()), SLOT(uncDatabaseClicked()));
-    connect(ok, SIGNAL(clicked()), SLOT(OKClicked()));
+
     grid->addWidget(newB, 2, 0);
     grid->addWidget(uncNodeB, 2, 1);
     grid->addWidget(uncDatabaseB, 2, 2);
-    grid->addWidget(ok, 2, 4);
+    if( m_iMode == ADD_CATINFO_MODE_NORM ) grid->addWidget(ok, 2, 4);
 
     mainLV = new QTableWidget(this);
     mainLV->setGeometry( 20, 20, 420, 300);
@@ -62,26 +76,31 @@ CatalogInfo::CatalogInfo(DSQLPlugin* pDSQL, QWidget *parent)  :QDialog(parent) /
     else pApi = new DBAPIPlugin(m_pIDSQL->getDBTypeName());
     if( !pApi->isValid() )
     {
-        QMessageBox::information(0, "UDB API", "Could not load the required plugin, sorry.");        
+        QMessageBox::information(0, "UDB API", "Could not load the required plugin, sorry.");
         return;
     }
     connect((QWidget*)mainLV->horizontalHeader(), SIGNAL(sectionClicked(int)), this, SLOT(sortClicked(int)));
     fillLV();
 }
-CatalogInfo::~CatalogInfo()
-{
-    if( pApi ) delete pApi;
-}
 
+void CatalogInfo::keyPressEvent(QKeyEvent *event)
+{
+    if( event->key() == Qt::Key_Escape )
+    {
+        if( m_iMode == CATDB_MODE_NORM) close();
+        else QWidget::keyPressEvent(event);
+    }
+}
 
 void CatalogInfo::OKClicked()
 {
-    close();
+    if( m_iMode == ADD_CATINFO_MODE_NORM)  close();
 }
 
 void CatalogInfo::newClicked()
 {
     CatalogDB foo(m_pIDSQL, this);
+    foo.createDisplay();
     foo.exec();
     if( foo.catalogChanged() ) fillLV();
 }
@@ -103,7 +122,7 @@ void CatalogInfo::uncatalogItem(int colNr)
     }
     else if( colNr == COL_NODE )
     {
-        if( QMessageBox::question(this, "PMF", "Uncatalog selected nodes?\n(Note:Databases will be uncatalogued too)", "Yes", "No", 0, 1) != 0 ) return;
+        if( QMessageBox::question(this, "PMF", "Uncatalog selected nodes?\n(Note: Databases will be uncatalogued too)", "Yes", "No", 0, 1) != 0 ) return;
     }
     else
     {
@@ -134,9 +153,9 @@ void CatalogInfo::uncatalogItem(int colNr)
     fillLV();
 }
 
-int CatalogInfo::uncatalogNode(DBAPIPlugin* pApi, GString name)
+int CatalogInfo::uncatalogNode(DBAPIPlugin* pApi, GString nodeName)
 {
-    if( !name.strip().length() )
+    if( !nodeName.strip().length() )
     {
         if( QMessageBox::question(this, "PMF", "This appears to be a local node, uncatalog anyway (not recommended)?", "Yes", "No", 0, 1) != 0 ) return 123;
     }
@@ -145,13 +164,22 @@ int CatalogInfo::uncatalogNode(DBAPIPlugin* pApi, GString name)
     int erc;
     for( int i = 1; i <= (int)dataSeq.numberOfElements(); ++i)
     {
-        if( name != dataSeq.elementAtPosition(i)->NodeName ) continue;
+        if( nodeName != dataSeq.elementAtPosition(i)->NodeName ) continue;
         erc = pApi->uncatalogDatabase(dataSeq.elementAtPosition(i)->Alias);
         if( erc ) tm("Could not uncatalog database "+dataSeq.elementAtPosition(i)->Alias+", error: "+pApi->SQLError());
     }
-    erc = pApi->uncatalogNode(name);
+    erc = pApi->uncatalogNode(nodeName);
     erc = erc == -1021 ? 0 : erc;
-    if( erc ) tm("Could not uncatalog node "+name+", error: "+pApi->SQLError());
+    if( erc ) tm("Could not uncatalog node "+nodeName+", error: "+pApi->SQLError());
+    else
+    {
+        ConnSet cs;
+        cs.initConnSet();
+        cs.removeHostFromList(_DB2, nodeName);
+        cs.removeHostFromList(_DB2ODBC, nodeName);
+        cs.save();
+    }
+
     return erc;
 }
 
@@ -167,8 +195,10 @@ int CatalogInfo::uncatalogDB(DBAPIPlugin* pApi, GString name, GString node)
     else
     {
         ConnSet cs;
+        cs.initConnSet();
         cs.removeFromList(_DB2ODBC, name);
         cs.removeFromList(_DB2, name);
+        cs.save();
     }
     return erc;
 }

@@ -20,9 +20,13 @@ public:
     PmfSchemaCB(QWidget* parent, GString currentSchema = "" );
     virtual ~PmfSchemaCB(){}
     int fill(DSQLPlugin* pDSQL, GString schema = "", int hideSysTabs = 0, int caseSensitive = 1 );
+    void setGDebug(GDebug *pDeb){m_pGDeb = pDeb;}
+
 private:
     int isSysTab(DSQLPlugin * pDSQL, GString in);
 	GString m_gstrCurrentSchema;    
+    void deb(GString fnName, GString txt);
+    GDebug *m_pGDeb;
 };
 
 #endif // _included

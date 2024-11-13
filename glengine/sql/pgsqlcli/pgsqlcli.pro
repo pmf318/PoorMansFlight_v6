@@ -47,6 +47,11 @@ CONFIG+=plugin
 ##ODBC##
 #QTPLUGIN += qsqlodbc
 
+IS_MSVC_STATIC = $$(MSVC_STATIC)
+!isEmpty(IS_MSVC_STATIC){
+	DEFINES += MSVC_STATIC_BUILD
+}
+
 
 TEMPLATE=lib
 DEFINES += NO_QT
@@ -106,6 +111,11 @@ win32-msvc{
     LIBS += odbc32.lib
     LIBS += WS2_32.lib
     LIBS += ../../lib/glengineQT.lib
+	!isEmpty(IS_MSVC_STATIC){
+		CONFIG+=STATIC
+		DEFINES += STATIC	
+	}
+	
 }
 
 win32{

@@ -23,10 +23,16 @@ PmfSchemaCB::PmfSchemaCB(QWidget *parent, GString currentSchema )
 
 int PmfSchemaCB::fill(DSQLPlugin * pDSQL, GString schema, int hideSysTabs, int caseSensitive)
 {
+    m_pGDeb = NULL;
+
+    //no m_pGDeb yet. Needs setGDebg
+    //deb(__FUNCTION__, "start");
+
     this->clear();
 	GString s;
     DSQLPlugin *dsql = new DSQLPlugin(*pDSQL);
     dsql->getTabSchema();
+
 
 	int cur = -1;
 	this->addItem( _selStringCB); //First item is "<select>"
@@ -47,6 +53,7 @@ int PmfSchemaCB::fill(DSQLPlugin * pDSQL, GString schema, int hideSysTabs, int c
 		this->setCurrentIndex(cur);
 	}
     delete dsql;
+    //deb(__FUNCTION__, "end");
     return cur;
 }
 
@@ -65,3 +72,7 @@ int PmfSchemaCB::isSysTab(DSQLPlugin * pDSQL, GString in)
 }
 
 
+void PmfSchemaCB::deb(GString fnName, GString txt)
+{
+    if( m_pGDeb ) m_pGDeb->debugMsg("tabEdit", 1, "::"+fnName+" "+txt);
+}

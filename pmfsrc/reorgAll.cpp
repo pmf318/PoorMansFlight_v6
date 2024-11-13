@@ -104,7 +104,7 @@ ReorgAll::ReorgAll( DSQLPlugin* pDSQL, QWidget *parent, GString tableName, int h
 	tb = NULL;
 
 	timer = new QTimer( this );
-	connect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
+	connect( timer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
 	
 	//Add stuff to mainWindow
     addColsWdgt();
@@ -175,41 +175,41 @@ int ReorgAll::saveAsPlainText(GString fileName, int overwrite)
 
     GFile gf(fileName, 2);
 
-    gf.writeToNewLine("-- File created by Poor Man's Flight");
-    gf.writeToNewLine("--");
+    gf.addLineForOS("-- File created by Poor Man's Flight");
+    gf.addLineForOS("--");
 
     if( m_pDSQL->getDBType() == DB2 || m_pDSQL->getDBType() == DB2ODBC )
     {
-        gf.writeToNewLine("-- To create the table below, open a DB2 CLP (CommandLineProcessor),");
-        gf.writeToNewLine("-- connect to the database, and execute:");
-        gf.writeToNewLine("-- db2 -tvf <name of this file> (and don't forget to commit)");
-        gf.writeToNewLine("-- ");
+        gf.addLineForOS("-- To create the table below, open a DB2 CLP (CommandLineProcessor),");
+        gf.addLineForOS("-- connect to the database, and execute:");
+        gf.addLineForOS("-- db2 -tvf <name of this file> (and don't forget to commit)");
+        gf.addLineForOS("-- ");
     }
-    gf.writeToNewLine("-- WARNING: BEFORE CREATING THE TABLE, VERIFY THE SETTINGS BELOW.");
-    gf.writeToNewLine("-- For example, if you use IDENTTY columns, verify that START and INCREMENT are OK");
-    gf.writeToNewLine("-- (PMF will not set these for you).");
-    gf.writeToNewLine("-- Also, make sure that the table gets created in the correct tablespace");
-    gf.writeToNewLine("-- by adding the appropriate CREATE ... IN <tablespace> statement.");
-    gf.writeToNewLine("-- The same goes for INDEX IN <tablespace>.");
-    gf.writeToNewLine("-- You might also want to add something like GRANT SELECT ON <table> TO...");
-    gf.writeToNewLine("-- ");
+    gf.addLineForOS("-- WARNING: BEFORE CREATING THE TABLE, VERIFY THE SETTINGS BELOW.");
+    gf.addLineForOS("-- For example, if you use IDENTTY columns, verify that START and INCREMENT are OK");
+    gf.addLineForOS("-- (PMF will not set these for you).");
+    gf.addLineForOS("-- Also, make sure that the table gets created in the correct tablespace");
+    gf.addLineForOS("-- by adding the appropriate CREATE ... IN <tablespace> statement.");
+    gf.addLineForOS("-- The same goes for INDEX IN <tablespace>.");
+    gf.addLineForOS("-- You might also want to add something like GRANT SELECT ON <table> TO...");
+    gf.addLineForOS("-- ");
 
 
     TABLE_PROPS tabProps = m_pDSQL->getTableProps(iFullTabName);
     if( tabProps.TableType == TYPE_TYPED_VIEW || tabProps.TableType == TYPE_UNTYPED_VIEW )
     {
-        gf.writeToNewLine("-- Uncomment the next line to drop the view first:");
-        gf.writeToNewLine("-- DROP VIEW  "+iFullTabName);
+        gf.addLineForOS("-- Uncomment the next line to drop the view first:");
+        gf.addLineForOS("-- DROP VIEW  "+iFullTabName);
     }
     if( tabProps.TableType == TYPE_TYPED_TABLE || tabProps.TableType == TYPE_UNTYPED_TABLE )
     {
-        gf.writeToNewLine("-- Uncomment the next line to drop the table first:");
-        gf.writeToNewLine("-- DROP TABLE "+iFullTabName);
+        gf.addLineForOS("-- Uncomment the next line to drop the table first:");
+        gf.addLineForOS("-- DROP TABLE "+iFullTabName);
     }
-    gf.writeToNewLine("");
+    gf.addLineForOS("");
 
 
-    gf.writeToNewLine(mainEditor->document()->toPlainText());
+    gf.addLineForOS(mainEditor->document()->toPlainText());
     return 0;
 }
 
@@ -1170,8 +1170,12 @@ void ReorgAll::checksTab()
     grid->addWidget(checksLV, 3,0, 1, 5);
     checksLV->setSelectionBehavior(QAbstractItemView::SelectRows);
 
-    QLabel * rowHint = new QLabel("Double-click row to see CREATE statement");
-    rowHint->setStyleSheet("color: blue;");
+    QLabel * rowHint = new QLabel("Double-click row to view CREATE statement");
+    if( Helper::isSystemDarkPalette() ) rowHint->setStyleSheet("QLabel { color : #4ebbf5; }");	
+
+    else rowHint->setStyleSheet("color: blue;");
+	printf("ReorgAll::checksTab, Helper::isSystemDarkPalette(): %i\n", Helper::isSystemDarkPalette());
+
     grid->addWidget(rowHint , 1,0, 1, 5);
 
     newCheck = new QPushButton(pWdgt);
@@ -1259,8 +1263,12 @@ void ReorgAll::indexTab()
 	QLabel *s = new QLabel( msg, pWdgt);
     s->setStyleSheet("font-weight: bold;");
 	grid->addWidget(s, 0,0, 1, 5);
-    QLabel * rHint = new QLabel("Double-click row to see CREATE statement");
-    rHint->setStyleSheet("color: blue;");
+    QLabel * rHint = new QLabel("Double-click row to view CREATE statement");
+	if( Helper::isSystemDarkPalette() ) rHint->setStyleSheet("QLabel { color : #4ebbf5; }");	
+    else rHint->setStyleSheet("color: blue;");
+	
+	
+	
     grid->addWidget(rHint, 1,0, 1, 5);
 	
 	rawIndexCB = new QCheckBox(pWdgt);
@@ -1894,7 +1902,7 @@ void ReorgAll::startRunstats()
     delete pAPI;
 }
 
-void ReorgAll::timerEvent()
+void ReorgAll::versionCheckTimerEvent()
 {
 
 	if( !theThread ) return;
@@ -1988,7 +1996,7 @@ void ReorgAll::saveList()
 	}
 	for (long i =0; i < bindLB->count(); ++i )
 	{
-		if( GString(bindLB->item(i)->text()).length() ) f.writeToNewLine(GString(bindLB->item(i)->text()));
+        if( GString(bindLB->item(i)->text()).length() ) f.addLineForOS(GString(bindLB->item(i)->text()));
 	}
 
 }

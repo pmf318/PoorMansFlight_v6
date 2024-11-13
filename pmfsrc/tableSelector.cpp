@@ -21,6 +21,7 @@ TableSelector::TableSelector(DSQLPlugin* pDSQL, QWidget *parent, GString current
     iHideSysTabs = hideSysTabs;
     strCurrentSchema = currentSchema;
     int pos = 0;
+    m_pGDeb = NULL;
 
     QBoxLayout *topLayout = new QVBoxLayout(this);
     QGridLayout * grid = new QGridLayout();
@@ -90,6 +91,7 @@ void TableSelector::fillSchemaCB(GString context )
 {
     int pos;
     if( context.occurrencesOf(".")) context = context.subString(context.indexOf(".")+1, context.length()).strip();
+    deb(__FUNCTION__, "calling fill");
     pos = schemaCB->fill(m_pDSQL, context, iHideSysTabs);
     schemaSelected(pos);
 }
@@ -138,3 +140,9 @@ GString TableSelector::tablePrefix()
     else prefix += "\""+schemaCB->currentText()+"\".";
     return prefix;
 }
+
+void TableSelector::deb(GString fnName, GString txt)
+{
+    if( m_pGDeb ) m_pGDeb->debugMsg("tabEdit", 1, "::"+fnName+" "+txt);
+}
+

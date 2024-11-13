@@ -39,7 +39,7 @@ public:
    void setText(GString text);
    void setBookmarkData(BOOKMARK * pBm, BookmarkSeq *bookmarkSeq);
    void getBookmarkData(BOOKMARK * pBm);
-   void setSqlHighlighter(int colorScheme, GSeq <GString>* list);
+   void setSqlHighlighter(PmfColorScheme colorScheme, GSeq <GString>* list);
    void setLineWrapping(QTextEdit::LineWrapMode mode);
    int saveClicked();
 

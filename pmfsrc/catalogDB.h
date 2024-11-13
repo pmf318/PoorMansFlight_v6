@@ -43,6 +43,8 @@ typedef struct{
    int Port;
    } CATALOG_DB;
 
+#define CATDB_MODE_NORM 0
+#define CATDB_MODE_EMBED 1
 
 class CatalogDB : public QDialog
 {
@@ -51,6 +53,7 @@ class CatalogDB : public QDialog
 public:
     CatalogDB(DSQLPlugin* pDSQL, QWidget * parent = 0);
     ~CatalogDB();
+    void createDisplay(int mode = CATDB_MODE_NORM);
 
     //   void tm(GString message){QMessageBox::information(this, "PMF", message);}
     void saveGeometry();
@@ -61,9 +64,9 @@ public:
     static int uncatalogDb(CATALOG_DB * pCatalogDb);
 
 
-    
-private slots:
+public slots:
     void OKClicked();
+private slots:
     void closeClicked();
     void selectionToggled();
 
@@ -72,7 +75,10 @@ protected:
     bool eventFilter(QObject *obj, QEvent *event);
 
 private:
+    DSQLPlugin* m_pDSQL;
+    QWidget * m_pParent;
     void fillAllFields();
+
     GSeq<NODE_INFO*> fillNodesCB(DBAPIPlugin* pApi);
     static int dbAliasExistsOnNode(CATALOG_DB * pCatalogDb, GSeq <DB_INFO*> *dbSeq, GSeq<NODE_INFO*> *nodeSeq );
     static int nodeExists(CATALOG_DB * pCatalogDb, GSeq<NODE_INFO*>* nodeSeq);
@@ -82,6 +88,7 @@ private:
     QPushButton * okB;
     QPushButton * closeB;
     int m_iCatalogChanged;
+    int m_iMode;
 
     QRect m_qrGeometry;
     void msg(GString txt);

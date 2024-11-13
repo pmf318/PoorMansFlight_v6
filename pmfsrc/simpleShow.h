@@ -21,6 +21,7 @@
 #include <qtextstream.h>
 #include <dsqlplugin.hpp>
 #include <dbapiplugin.hpp>
+#include "pmfdefines.h"
 
 #include <gstring.hpp>
 #include "txtEdit.h"
@@ -36,7 +37,7 @@ public:
    ~SimpleShow();
    //short fillLB();
    void setText(GString text);
-   void setSqlHighlighter(int colorScheme, GSeq <GString>* list);
+   void setSqlHighlighter(PmfColorScheme colorScheme, GSeq <GString>* list);
    void setLineWrapping(QTextEdit::LineWrapMode mode);
    GString getText();
    int saveClicked();

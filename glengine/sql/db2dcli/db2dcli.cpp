@@ -239,6 +239,11 @@ GString db2dcli::connect(GString db, GString user, GString passwd, GString host,
     return "";
 }
 
+GString db2dcli::reconnect(CON_SET *pCS)
+{
+    return connect(m_strDB, m_strUID, m_strPWD, m_strHost, m_strPort);
+}
+
 GString db2dcli::connect(CON_SET * pCs)
 {
     return this->connect(pCs->DB, pCs->UID, pCs->PWD, pCs->Host, pCs->Port);
@@ -270,7 +275,7 @@ int db2dcli::disconnect()
   return 0;
 }
 
-GString db2dcli::initAll(GString message, unsigned long maxRows, int getLen)
+GString db2dcli::initAll(GString message, long maxRows, int getLen)
 {
     SQLRETURN ret = 0;
     deb("initAll: start. Msg: "+message);
@@ -335,7 +340,7 @@ GString db2dcli::initAll(GString message, unsigned long maxRows, int getLen)
     while ( SQLFetch(m_SQLHSTMT) == SQL_SUCCESS)
     {
         SQLINTEGER len = 0;
-        if( maxRows > 0 && m_iNumberOfRows >= maxRows ) break;
+        if( maxRows >= 0 && m_iNumberOfRows >= maxRows ) break;
         pRow = new GRowHdl;
         int bufLen;
         short isNull;
@@ -1526,6 +1531,7 @@ int  db2dcli::getDataBases(GSeq <CON_SET*> *dbList)
     for(unsigned long i = 1; i <= this->numberOfRows(); ++i)
     {
         pCS = new CON_SET;
+        pCS->init();
         pCS->DB = this->rowElement(i, 1);
         pCS->Host = _HOST_DEFAULT;
         dbList->add(pCS);
@@ -1570,6 +1576,7 @@ int  db2dcli::getDataBases(GSeq <CON_SET*> *dbList)
     {
         deb("getDataBases, got DESC: "+GString(desc)+", DSN: "+GString(dsn));
         pCS = new CON_SET;
+        pCS->init();
         pCS->DB = dsn;
         deb("getDataBases, adding "+GString(dsn));
         pCS->Host = _HOST_DEFAULT;
@@ -2858,7 +2865,6 @@ GString db2dcli::initAll(GString message, QListView * pLV, unsigned long maxLine
 
     while (SQLFetch(hstmt) == 0)
     {
-
        if( lastItem != NULL ) lvItem = new QListViewItem(pLV, lastItem);
        else lvItem = new QListViewItem(pLV);
        lastItem = lvItem;

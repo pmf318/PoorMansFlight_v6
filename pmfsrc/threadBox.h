@@ -44,7 +44,7 @@ class ThreadBox : public QDialog
 //     void tm(GString message){QMessageBox::information(this, "Process", (char*)message);}
 
   public slots:
-     void timerEvent();
+     void versionCheckTimerEvent();
      void callExit();
    
 

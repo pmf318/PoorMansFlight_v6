@@ -37,18 +37,18 @@
 #ifndef _REORGALL_
 #define _REORGALL_
 
-    typedef struct{
-       int rowType;
-       GString name;
-       QRadioButton * typeRB;
-       QCheckBox *nnCB;
-       QLineEdit *defaultLE;
-       QLabel *sizeTxt;
-       QLineEdit *sizeLE;
-       QComboBox *mbCB;
-       QCheckBox *logCB;
-       QCheckBox *compCB;
-       } NEWROW;
+typedef struct{
+    int rowType;
+    GString name;
+    QRadioButton * typeRB;
+    QCheckBox *nnCB;
+    QLineEdit *defaultLE;
+    QLabel *sizeTxt;
+    QLineEdit *sizeLE;
+    QComboBox *mbCB;
+    QCheckBox *logCB;
+    QCheckBox *compCB;
+} NEWROW;
 
 //avoid revcursive include
 class TabEdit;
@@ -117,7 +117,7 @@ private slots:
     void endIt();
     void dropCols();
     void saveChanges();
-    void timerEvent();
+    void versionCheckTimerEvent();
     short fillIndLV();
     short fillChecksLV();
     void fillColLV();

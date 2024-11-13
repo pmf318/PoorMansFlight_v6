@@ -36,8 +36,10 @@ public:
     TableSelector(DSQLPlugin* pDSQL, QWidget *parent=0, GString currentSchema = "", int hideSysTabs = 0, int hideListBox = 0);
     ~TableSelector();
     void fillLB(GString currentSchema);
+    void deb(GString fnName, GString txt);
     QListWidget * getTableHandle();
     GString tablePrefix();
+    void setGDebug(GDebug *pDeb){m_pGDeb = pDeb;}
 
 private slots:
     void schemaSelected(int index);
@@ -57,6 +59,7 @@ private:
     DSQLPlugin * m_pDSQL;
     int iHideSysTabs;
     GString strCurrentSchema;
+    GDebug * m_pGDeb;
     void fillSchemaCB(GString context );
 
 };

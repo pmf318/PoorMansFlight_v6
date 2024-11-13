@@ -1,6 +1,7 @@
 
 
 #include "sqlHighlighter.h"
+#include "helper.h"
 #include <gseq.hpp>
 #include <QMessageBox>
 
@@ -9,18 +10,23 @@
  * QT 6
 *******************************************************************/
 #if QT_VERSION >= 0x060000
-SqlHighlighter::SqlHighlighter( int colorScheme, QTextDocument *parent, GSeq<GString> *sqlCmdList, GSeq<GString> *hostVarList)  : QSyntaxHighlighter(parent)
+SqlHighlighter::SqlHighlighter( PmfColorScheme colorScheme, QTextDocument *parent, GSeq<GString> *sqlCmdList, GSeq<GString> *hostVarList)  : QSyntaxHighlighter(parent)
 {
 
     m_iColorScheme = colorScheme;
     HighlightingRule sqlSyntaxRule;
     HighlightingRule colNamesRule;
 
-    if(m_iColorScheme) sqlKeywordFormat.setForeground(Qt::darkBlue);
-    //sqlKeywordFormat.setFontWeight(QFont::Bold);
-
-    if(m_iColorScheme) colNameFormat.setForeground(Qt::darkGreen);
-    //colNameFormat.setFontWeight(QFont::Bold);
+    if(!Helper::isSystemDarkPalette()) 
+	{
+		sqlKeywordFormat.setForeground(Qt::darkBlue);
+		colNameFormat.setForeground(Qt::darkGreen);
+	}
+	else
+	{
+		sqlKeywordFormat.setForeground(Qt::cyan);
+		colNameFormat.setForeground(Qt::magenta);
+	}
 
 
     QStringList sqlKeywordPatterns;
@@ -78,12 +84,14 @@ SqlHighlighter::SqlHighlighter( int colorScheme, QTextDocument *parent, GSeq<GSt
     sqlSyntaxRule.format = functionFormat;
     highlightingRules.append(sqlSyntaxRule);
     */
-    if(m_iColorScheme) singleLineCommentFormat.setForeground(Qt::darkGray);
+    if(!Helper::isSystemDarkPalette()) singleLineCommentFormat.setForeground(Qt::darkGray);
+	singleLineCommentFormat.setForeground(Qt::gray);
     sqlSyntaxRule.pattern = QRegularExpression("--[^\n]*");
     sqlSyntaxRule.format = singleLineCommentFormat;
     highlightingRules.append(sqlSyntaxRule);
 
-    if(m_iColorScheme) multiLineCommentFormat.setForeground(Qt::red);
+    if(!Helper::isSystemDarkPalette()) multiLineCommentFormat.setForeground(Qt::red);
+	else multiLineCommentFormat.setForeground(Qt::darkGray);
 
     sqlValStartExpression= QRegularExpression("'");
     sqlValEndExpression= QRegularExpression("'");
@@ -105,7 +113,7 @@ void SqlHighlighter::deb(GString msg)
 
 void SqlHighlighter::highlightBlock(const QString &text)
 {
-    if( m_iColorScheme )
+    if( !Helper::isSystemDarkPalette() )
     {
         highlightThisBlock(text, sqlValStartExpression, sqlValEndExpression, Qt::darkRed );
         highlightThisBlock(text, txtValStartExpression, txtValEndExpression, Qt::darkGreen );
@@ -113,7 +121,7 @@ void SqlHighlighter::highlightBlock(const QString &text)
     else
     {
         highlightThisBlock(text, sqlValStartExpression, sqlValEndExpression, QColor(204, 51, 153));
-        highlightThisBlock(text, txtValStartExpression, txtValEndExpression, QColor(204, 0, 0) );
+        highlightThisBlock(text, txtValStartExpression, txtValEndExpression, QColor(179, 137, 23) );
     }
 }
 
@@ -170,17 +178,25 @@ void SqlHighlighter::highlightThisBlock(const QString &text, QRegularExpression 
 /******************************************************************
  * QT 5
 *******************************************************************/
-SqlHighlighter::SqlHighlighter( int colorScheme, QTextDocument *parent, GSeq<GString> *sqlCmdList, GSeq<GString> *hostVarList)  : QSyntaxHighlighter(parent)
+SqlHighlighter::SqlHighlighter( PmfColorScheme colorScheme, QTextDocument *parent, GSeq<GString> *sqlCmdList, GSeq<GString> *hostVarList)  : QSyntaxHighlighter(parent)
 {
     m_iColorScheme = colorScheme;
     HighlightingRule sqlSyntaxRule;
     HighlightingRule colNamesRule;
 
-    if(m_iColorScheme) sqlKeywordFormat.setForeground(Qt::darkBlue);
-    //sqlKeywordFormat.setFontWeight(QFont::Bold);
+    if(!Helper::isSystemDarkPalette())
+	{
+		sqlKeywordFormat.setForeground(Qt::darkBlue);
+		//sqlKeywordFormat.setFontWeight(QFont::Bold);
+		colNameFormat.setForeground(Qt::darkGreen);
+		//colNameFormat.setFontWeight(QFont::Bold);
+	}
+	else
+	{
+		sqlKeywordFormat.setForeground(Qt::cyan);
+		colNameFormat.setForeground(Qt::magenta);
+	}
 
-    if(m_iColorScheme) colNameFormat.setForeground(Qt::darkGreen);
-    //colNameFormat.setFontWeight(QFont::Bold);
 
 
     QStringList sqlKeywordPatterns;
@@ -238,12 +254,14 @@ SqlHighlighter::SqlHighlighter( int colorScheme, QTextDocument *parent, GSeq<GSt
     sqlSyntaxRule.format = functionFormat;
     highlightingRules.append(sqlSyntaxRule);
     */
-    if(m_iColorScheme) singleLineCommentFormat.setForeground(Qt::darkGray);
+    if(!Helper::isSystemDarkPalette()) singleLineCommentFormat.setForeground(Qt::darkGray);
+	else singleLineCommentFormat.setForeground(Qt::gray);
     sqlSyntaxRule.pattern = QRegExp("--[^\n]*");
     sqlSyntaxRule.format = singleLineCommentFormat;
     highlightingRules.append(sqlSyntaxRule);
 
-    if(m_iColorScheme) multiLineCommentFormat.setForeground(Qt::red);
+    if(!Helper::isSystemDarkPalette()) multiLineCommentFormat.setForeground(Qt::red);
+	else multiLineCommentFormat.setForeground(Qt::darkGray);
 
     sqlValStartExpression= QRegExp("'");
     sqlValEndExpression= QRegExp("'");
@@ -265,7 +283,7 @@ void SqlHighlighter::deb(GString msg)
 
 void SqlHighlighter::highlightBlock(const QString &text)
 {
-    if( m_iColorScheme )
+    if( !Helper::isSystemDarkPalette() ) //Standard
     {
         highlightThisBlock(text, sqlValStartExpression, sqlValEndExpression, Qt::darkRed );
         highlightThisBlock(text, txtValStartExpression, txtValEndExpression, Qt::darkGreen );
@@ -273,7 +291,7 @@ void SqlHighlighter::highlightBlock(const QString &text)
     else
     {
         highlightThisBlock(text, sqlValStartExpression, sqlValEndExpression, QColor(204, 51, 153));
-        highlightThisBlock(text, txtValStartExpression, txtValEndExpression, QColor(204, 0, 0) );
+        highlightThisBlock(text, txtValStartExpression, txtValEndExpression, QColor(179, 137, 23) );
     }
 }
 

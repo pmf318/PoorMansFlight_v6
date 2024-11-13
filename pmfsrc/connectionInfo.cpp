@@ -37,19 +37,23 @@ ConnectionInfo::ConnectionInfo(DSQLPlugin* pDSQL, QWidget *parent )
     CON_SET curSet;
     pDSQL->currentConnectionValues(&curSet);
 
-    QLineEdit * pTypeLE, *pDBLE, *pHostLE, *pPortLE;
+    QLineEdit * pTypeLE, *pDBLE, *pHostLE, *pPortLE, *pUserLE;
     pTypeLE = new QLineEdit(curSet.Type, this);
     pTypeLE->setReadOnly(true);
-    pTypeLE->setDisabled(true);
+//    pTypeLE->setDisabled(true);
     pDBLE = new QLineEdit(curSet.DB, this);
-    //pDBLE->setReadOnly(true);
-    pDBLE->setDisabled(true);
+    pDBLE->setReadOnly(true);
+    //pDBLE->setDisabled(true);
     pHostLE = new QLineEdit(curSet.Host, this);
     pHostLE->setReadOnly(true);
-    pHostLE->setDisabled(true);
+    //pHostLE->setDisabled(true);
     pPortLE = new QLineEdit(curSet.Port, this);
     pPortLE->setReadOnly(true);
-    pPortLE->setDisabled(true);
+    //pPortLE->setDisabled(true);
+    pUserLE = new QLineEdit(curSet.UID, this);
+    pUserLE->setReadOnly(true);
+    //pUserLE->setDisabled(true);
+
 
     grid->addWidget(new QLabel("Type: ", this), 0, 0);
     grid->addWidget(pTypeLE, 0, 1, 1, 2);
@@ -63,13 +67,16 @@ ConnectionInfo::ConnectionInfo(DSQLPlugin* pDSQL, QWidget *parent )
     grid->addWidget(new QLabel("Port: ", this), 3, 0);
     grid->addWidget(pPortLE, 3, 1, 1, 2);
 
+    grid->addWidget(new QLabel("User: ", this), 4, 0);
+    grid->addWidget(pUserLE, 4, 1, 1, 2);
+
 
     QHBoxLayout *buttonLayout = new QHBoxLayout;
     QWidget * buttonWdiget = new QWidget();
     buttonWdiget->setLayout(buttonLayout);
     buttonLayout->addWidget(ok);
 
-    grid->addWidget(buttonWdiget, 4, 1, 1, 1);
+    grid->addWidget(buttonWdiget, 5, 1, 1, 1);
 
 }
 

@@ -32,34 +32,18 @@ unix{
     CONFIG+=debug
     CONFIG+=DEBUG
 }
-#CONFIG += console
-#CONFIG+=STATIC
-#CONFIG+=staticlib
-#CONFIG+=STATICLIB
 
-!isEmpty(IS_MSVC_STATIC){
-	win32-msvc{
-		CONFIG+=STATIC
-		#CONFIG += staticlib
-		DEFINES += STATIC
-		#QT      += core gui
-		DEFINES += QT_NODLL
-		DEFINES += QT_STATIC_BUILD
-	
-		QMAKE_CFLAGS_RELEASE += /MT
-		QMAKE_CXXFLAGS_RELEASE += /MT
-		QMAKE_CFLAGS_RELEASE -= -MD
-		QMAKE_CXXFLAGS_RELEASE -= -MD
-		QMAKE_LFLAGS += /MANIFEST
-		
-		CONFIG += embed_manifest_exe		
-	}
-}
 
 ################
 # Set version here:
 # ALSO: SET THE SAME STRING IN ./glengine/sql/db2dsql.pro !
-PMF_VERSION=6002
+
+PMF_VERSION = $$(PMF_BLD_VER)
+#message(Building $$PMF_VERSION)
+isEmpty(PMF_VERSION){
+	PMF_VERSION=6007
+}
+
 
 ################
 ################
@@ -195,6 +179,9 @@ SOURCES += ./editBmDetail.cpp
 SOURCES += ./addDatabaseHost.cpp
 SOURCES += ./selectEncoding.cpp
 SOURCES += ./connectionInfo.cpp
+SOURCES += ./newConn.cpp
+SOURCES += ./editConn.cpp
+SOURCES += ./passwdFld.cpp
 
 HEADERS += ./pmf.h \
     sqlHighlighter.h \
@@ -255,7 +242,9 @@ HEADERS += ./editBmDetail.h
 HEADERS += ./addDatabaseHost.h
 HEADERS += ./selectEncoding.h
 HEADERS += ./connectionInfo.h
-
+HEADERS += ./newConn.h
+HEADERS += ./editConn.h
+HEADERS += ./passwdFld.h
 
 
 TARGET= pmf
@@ -272,12 +261,14 @@ win32-msvc{
 	LIBS += legacy_stdio_definitions.lib
 	!isEmpty(IS_MSVC_STATIC){
 		LIBS += legacy_stdio_definitions.lib
-		LIBS += -L/qt-static/lib 
+		CONFIG+=STATIC
+		DEFINES += STATIC
 		LIBS += libcmt.lib
 		LIBS += msvcrt.lib
 	}
 	contains(QMAKE_TARGET.arch, x86_64) {
-		LIBS += ../zlib/zdll.lib
+		#LIBS += ../zlib/zdll.lib
+		LIBS += ../zlib/x64/zlib.lib		
 	}
 	else{
 		LIBS += ../zlib/zlib.lib		

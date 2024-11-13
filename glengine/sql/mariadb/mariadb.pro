@@ -27,6 +27,11 @@ unix{
     CONFIG-=release
 }
 
+IS_MSVC_STATIC = $$(MSVC_STATIC)
+!isEmpty(IS_MSVC_STATIC){
+	DEFINES += MSVC_STATIC_BUILD
+}
+
 #CONFIG-=debug
 
 ## Qt5 doc mentions this, but at least for now it's apparently not needed.
@@ -96,6 +101,11 @@ win32-msvc{
 		INCLUDEPATH += $$(MARIADB_INC_32)
 		LIBS += $$(MARIADB_LIB_32)/libmariadb.lib
 	}
+	!isEmpty(IS_MSVC_STATIC){
+		CONFIG+=STATIC
+		DEFINES += STATIC	
+	}
+	
     LIBS += user32.lib
     
     LIBS += WS2_32.lib

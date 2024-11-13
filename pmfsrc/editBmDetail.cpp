@@ -126,7 +126,7 @@ void EditBmDetail::setText(GString text)
     displayData();
 }
 
-void EditBmDetail::setSqlHighlighter(int colorScheme, GSeq <GString>* list)
+void EditBmDetail::setSqlHighlighter(PmfColorScheme colorScheme, GSeq <GString>* list)
 {
     SqlHighlighter * sqlHighlighter = new SqlHighlighter(colorScheme, infoTE->document(), list);
     infoTE->setSqlHighlighter(sqlHighlighter);

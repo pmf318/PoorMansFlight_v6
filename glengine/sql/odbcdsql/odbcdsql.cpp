@@ -205,6 +205,10 @@ GString odbcDSQL::connect(CON_SET * pCs)
     return this->connect(pCs->DB, pCs->UID, pCs->PWD, pCs->Host, pCs->Port);
 }
 
+GString odbcDSQL::reconnect(CON_SET *pCS)
+{
+    return connect(m_strDB, m_strUID, m_strPWD, m_strHost, m_strPort);
+}
 
 int odbcDSQL::disconnect()
 {	
@@ -212,12 +216,12 @@ int odbcDSQL::disconnect()
     SQLDisconnect(m_SQLHSTMT);
 	return 0;
 }
-GString odbcDSQL::initAll(GString message, unsigned long maxRows,  int getLen)
+GString odbcDSQL::initAll(GString message, long maxRows,  int getLen)
 {    
     return readRowData(message, maxRows,  getLen, 0);
 }
 
-GString odbcDSQL::readRowData(GString message, unsigned long maxRows,  int getLen, int getFullXML)
+GString odbcDSQL::readRowData(GString message, long maxRows,  int getLen, int getFullXML)
 {
     deb("::initAll, cmd: "+message);    
 	m_iLastSqlCode = 0;
@@ -304,7 +308,7 @@ GString odbcDSQL::readRowData(GString message, unsigned long maxRows,  int getLe
     while (SQL_SUCCEEDED(ret = SQLFetch(m_SQLHSTMT)))
     {
         SQLLEN len = 0;
-        if( maxRows > 0 && m_iNumberOfRows >= maxRows ) break;
+        if( maxRows >= 0 && m_iNumberOfRows >= maxRows ) break;
         pRow = new GRowHdl;
         int bufLen;
         short isNull = 0;
@@ -1236,6 +1240,7 @@ int odbcDSQL::getDataBases(GSeq <CON_SET*> *dbList)
     for(unsigned long i = 1; i <= this->numberOfRows(); ++i)
     {
         pCS = new CON_SET;
+        pCS->init();
         pCS->DB = this->rowElement(i, 1);
         pCS->Host = _HOST_DEFAULT;
         dbList->add(pCS);
@@ -1265,6 +1270,7 @@ int odbcDSQL::getDataBases(GSeq <CON_SET*> *dbList)
 #endif
 		{
 			pCS = new CON_SET;
+            pCS->init();
 			pCS->DB = dsn;
 			deb("getDataBases, adding "+GString(dsn));
 			pCS->Host = _HOST_DEFAULT;

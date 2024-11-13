@@ -10,6 +10,9 @@
 #include <dsqlplugin.hpp>
 #include <dbapiplugin.hpp>
 
+#define ADD_CATINFO_MODE_NORM 0
+#define ADD_CATINFO_MODE_EMBED 1
+
 class CatalogInfo : public QDialog
 {
    Q_OBJECT
@@ -17,12 +20,18 @@ public:
     CatalogInfo(DSQLPlugin * pDSQL, QWidget *parent=0);
     ~CatalogInfo();
    short fillLV();
-private slots:
+   void createDisplay(int mode = ADD_CATINFO_MODE_NORM);
+
+public slots:
    void OKClicked();
+
+private slots:
    void newClicked();
    void uncDatabaseClicked();
    void uncNodeClicked();
    void sortClicked(int);  
+protected:
+    void keyPressEvent(QKeyEvent *event);
 
 private:
    void uncatalogItem(int colNr);
@@ -37,6 +46,9 @@ private:
    QLabel * info;
    DBAPIPlugin * pApi;
    DSQLPlugin * m_pIDSQL;
+   QWidget* m_pParent;
+   int m_iMode;
+
 };
 
 #endif

@@ -58,13 +58,14 @@ private:
 
 public:
     VCExport   GSeq(){
-        first = last = crs = NULL; count = 0; m_GSeqCounter++;
+        first = last = crs = tmp = NULL; i = count = 0; m_GSeqCounter++;
+
     }
 
     VCExport   GSeq( const GSeq &aSeq )
     {
         first = last = crs = NULL; count = 0; m_GSeqCounter++;
-        unsigned long i = aSeq.count;
+        i = aSeq.count;
         crs = aSeq.first;
         while( i )
         {
@@ -195,7 +196,7 @@ public:
 
     VCExport GSeq <Type> &operator = (const GSeq <Type> aSeq)  {
         removeAll();
-        unsigned long i = aSeq.count;
+        i = aSeq.count;
         crs = aSeq.first;
         while( i )
         {
@@ -207,7 +208,7 @@ public:
     }
 
     VCExport GSeq <Type> &operator += (const GSeq <Type> aSeq)  {
-        unsigned long i = aSeq.count;
+        i = aSeq.count;
         crs = aSeq.first;
         while( i )
         {

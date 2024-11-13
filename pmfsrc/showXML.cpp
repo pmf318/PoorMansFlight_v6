@@ -230,7 +230,13 @@ GString ShowXML::getAllPaths()
 
 
     if( !partialXML.length() ) return "";
+
+    printf("partialXML:\n****\n%s\n****\n", (char*) GString(partialXML));
+
     doc.setContent(partialXML);
+
+    QString domStr = doc.toString();
+    printf("domStr:\n****\n%s\n****\n", (char*) GString(domStr));
 
 
     QString selTxt = xmlTE->selectedText();
@@ -308,6 +314,7 @@ GString ShowXML::getAllPaths()
 GString ShowXML::getXPath(QDomDocument doc, QString nodeName)
 {
     QDomElement root = doc.documentElement();
+    printf("nodeName: %s\n", (char*)GString( nodeName));
 
     QDomNodeList tags = root.elementsByTagName(nodeName);
     if( tags.count() <= 0 ) return nodeName;
@@ -318,8 +325,10 @@ GString ShowXML::getXPath(QDomDocument doc, QString nodeName)
     while(!parent.parentNode().isNull())
     {
         xpath = "/"+GString(parent.toElement().tagName()) + xpath;
+        printf("getXPath while:  %s\n", (char*) xpath);
         parent = parent.parentNode();
     }
+    printf("getXPath: ret %s\n", (char*) xpath);
     return xpath;
 }
 
@@ -331,6 +340,8 @@ GString ShowXML::createXPathText(int checkForAttribute)
     if( !partialXML.length() ) return "";
     partialDoc.setContent(partialXML);
 
+
+    printf("partialXML: \n%s\n\n", (char*) GString(partialXML));
     QString selTxt = xmlTE->selectedText();
     if( !selTxt.length() ) return "";
 
@@ -342,11 +353,13 @@ GString ShowXML::createXPathText(int checkForAttribute)
     while ( 1 )
     {
         childCount = domNode.childNodes().count();
+        printf("childCount: %i\n", childCount);
         if( childCount == 0 )break;
         domNode = domNode.lastChild();
     }
 
     GString constraint = m_Master->createUniqueColConstraint(m_pItem);
+    printf("Constraint: %s\n", (char*) constraint);
     if( !constraint.length() ) constraint = m_Master->createConstraintForThisItem(m_pItem).change("\"", "");
     constraint = constraint.stripLeading(" WHERE");
 
@@ -356,6 +369,7 @@ GString ShowXML::createXPathText(int checkForAttribute)
     QDomNode selectedDomNode = domNode;
     GString nodeName = selectedDomNode.nodeName();
     GString xpath = getXPath(partialDoc, nodeName);
+    printf("xpath: %s\n", (char*) xpath);
 
     if( checkForAttribute && !domNode.attributes().contains(selTxt) )
     {
@@ -372,7 +386,9 @@ GString ShowXML::createXPathText(int checkForAttribute)
 
 
     GString xmlConstraint = getXPathWithConstraints(partialDoc, nodeName);
+    printf("xmlConstraint: %s\n", (char*) xmlConstraint);
     GString colName = m_Master->m_pMainDSQL->hostVariable(m_pItem->column()-1);
+    printf("colName: %s\n", (char*) colName);
 
     GString attrSql;
     nodeName += "--"+attributesString(selectedDomNode);
@@ -469,7 +485,16 @@ GString ShowXML::attributeSql()
 
 GString ShowXML::getXPathWithConstraints(QDomDocument doc, QString selTxt)
 {
+    printf("getXPathWithConstraints, selTxt: %s\n", (char*) GString(selTxt));
     QDomElement root = doc.documentElement();       
+
+    QString str;
+    QTextStream stream(&str);
+    QDomNode nody = doc.documentElement();
+    nody.save(stream, 4);
+
+    printf("Stream: %s\n", (char*) GString(str));
+
     QDomNodeList tags = root.elementsByTagName(selTxt);
 
     if( tags.count() <= 0 ) return GString(selTxt)+attributesString( doc.documentElement());
@@ -477,14 +502,18 @@ GString ShowXML::getXPathWithConstraints(QDomDocument doc, QString selTxt)
     QDomNode parent = lastSelTag.parentNode();
     lastSelTag.attributes();
 
+    printf("tags.count(): %i\n", tags.count()-1);
     QDomNode selectedNode = tags.at(tags.count()-1);
     GString xpath = "/"+ GString(selectedNode.toElement().tagName()) + attributesString(selectedNode);
+    printf("getXPathWithConstraints, xpath: %s\n", (char*) GString(xpath));
 
     while(!parent.parentNode().isNull())
     {
         xpath = "/"+GString(parent.toElement().tagName())+attributesString(parent) + xpath;
+        printf("getXPathWithConstraints, while: xpath: %s\n", (char*) GString(xpath));
         parent = parent.parentNode();
     }
+    printf("getXPathWithConstraints, ret: xpath: %s\n", (char*) GString(xpath));
     return xpath;
 }
 

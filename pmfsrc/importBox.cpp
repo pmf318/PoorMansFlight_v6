@@ -255,12 +255,12 @@ ImportBox::ImportBox(DSQLPlugin* pDSQL, QWidget *parent, GString currentSchema, 
         crtRB->setDisabled(true);
     }
 
-
+    deb(__FUNCTION__, "Ctor, calling fill");
     schemaCB->fill(pDSQL, currentSchema, hideSysTabs);
     aThread = NULL;
     tb = NULL;
     timer = new QTimer( this );
-    connect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
+    connect( timer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
 
 
     if( parent->height() > 780 ) this->resize(610, 780);
@@ -544,7 +544,7 @@ void ImportBox::displayLog()
         errorLB->setText(msg);
         return;
     }
-    errTxt += "Please wait, reading LogFile...\n";
+    errTxt += "Please wait, checking for LogFile...\n";
     errTxt += "   ****  LogFile: "+m_strLogFile+"  ****\n";
     errTxt += "ErrorCode: "+GString(m_sqlErc)+"\n";
     errTxt += m_sqlErrTxt+"\n";
@@ -556,7 +556,7 @@ void ImportBox::displayLog()
         errTxt += t.readAll();
         f.close();
     }
-    else errTxt += "   No LogFile was created.\n";
+    else errTxt = "   Seems OK, no LogFile was created.\n";
     errorLB->blockSignals( false );
 
     GString hints = "Some general hints if Import or Load failed:\n\n";
@@ -572,7 +572,7 @@ void ImportBox::displayLog()
         QMessageBox::information(this, "pmf", hints);
     }
 }
-void ImportBox::timerEvent()
+void ImportBox::versionCheckTimerEvent()
 {
     if( !aThread ) return;
     if( !aThread->isAlive() )
@@ -651,12 +651,12 @@ void ImportBox::createExpImpOptions()
     if( m_pExpImpOptions ) delete m_pExpImpOptions;
     if( importRB->isChecked() )
     {
-        m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_IMPORT, &conSet);
+        m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_IMPORT, &conSet, m_pDSQL);
     }
     else if( loadRB->isChecked() )
     {
-        if( isHADRorLogArchMeth() )m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_LOAD_HADR, &conSet);
-        else m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_LOAD, &conSet);
+        if( isHADRorLogArchMeth() )m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_LOAD_HADR, &conSet, m_pDSQL);
+        else m_pExpImpOptions = new ExpImpOptions(this, ExpImpOptions::MODE_LOAD, &conSet, m_pDSQL);
     }
 }
 
@@ -713,6 +713,11 @@ void ImportBox::startPGSQLImport()
     *m_gstrPrevDir = path;
 
     GFile f(file);
+    if( !f.initOK() )
+    {
+        writeLog("Cannot open "+file+". If the file exists, maybe try running PMF as Admin or root?");
+        return;
+    }
     GString line;
     GString delim = m_pExpImpOptions->getFieldValue(ExpImpOptions::TYP_CSV, "Delimiter");
     int commitCount = m_pExpImpOptions->getFieldValue(ExpImpOptions::TYP_CSV, "CommitCount").asInt();
@@ -745,7 +750,7 @@ void ImportBox::startPGSQLImport()
     if( runCsvChecks(&pmfTable, line, delim) == 2 )f.nextLineCrs();
     if( runCsvChecks(&pmfTable, line, delim) == 1 )
     {
-        writeLog("Cannot import: Number of columns in file do not match columns");
+        writeLog("First line: Cannot import: Number of columns in file do not match columns");
         return;
     }
     if( commitCount > 0 ) err = m_pDSQL->initAll("BEGIN");
@@ -907,7 +912,11 @@ int ImportBox::runCsvChecks(PmfTable * pmfTable, GString line, GString delim)
 {
     line = line.strip('\n');
     GSeq <GString> elmts = line.split(delim);
-    if( elmts.numberOfElements() != pmfTable->columnCount() ) return 1;
+    if( elmts.numberOfElements() != pmfTable->columnCount() )
+    {
+        writeLog("-- No match: Number of cols in file: "+GString(elmts.numberOfElements())+", cols in table: "+GString(pmfTable->columnCount()));
+        return 1;
+    }
     GString elmString, colString;
     for( int i = 1; i<= pmfTable->columnCount(); ++i )
     {
@@ -938,7 +947,9 @@ GString ImportBox::createPgsqlCsvInsertCmd(PmfTable * pmfTable, GString line, GS
         if( pmfTable->column(i)->identity().length()  ) continue;
         PmfColumn *pCol = pmfTable->column(i);
         if( elmts.elementAtPosition(i) != "NULL" &&
-               (  (pCol->colType() == "bytea"  && byteaAsFile) || (pCol->colType() == "xml"  && xmlAsFile) ) )
+               (  (pCol->colType() == "bytea"  && byteaAsFile) ||
+                  (pCol->colType() == "text"  && byteaAsFile) ||
+                  (pCol->colType() == "xml"  && xmlAsFile) ) )
         {
             loadFileIntoBuf(elmts.elementAtPosition(i), &data);
             cmd += data + GString(",");
@@ -967,7 +978,7 @@ int ImportBox::loadFileIntoBuf(GString fileName, GString* data)
         fclose(f);
         fb[sz] = '\0';
         *data = GString(fb, sz).stripTrailing('\n');
-        delete fb;
+        delete[] fb;
         return 0;
     }
     return 1;
@@ -1452,7 +1463,12 @@ int ImportBox::canMapToTable(GString input)
 {
     GString schema = schemaFromFile(input);
     GString table = tableFromFile(input);
-    GString cmd = "Select count(*) from syscat.tables where translate(tabschema)='"+schema.upperCase()+"' and translate(tabname)='"+table.upperCase()+"'";    
+    GString cmd;
+    if( m_pDSQL->getDBType() == POSTGRES )
+    {
+        cmd = "Select count(*) from information_schema.tables where upper(table_schema)='"+schema.upperCase()+"' and upper(table_name)='"+table.upperCase()+"'";
+    }
+    else cmd = "Select count(*) from syscat.tables where translate(tabschema)='"+schema.upperCase()+"' and translate(tabname)='"+table.upperCase()+"'";
     m_pDSQL->initAll(cmd);
 
     if( m_pDSQL->rowElement(1,1).asInt() != 1 ) return 0;
@@ -1510,10 +1526,11 @@ void ImportBox::setComboBoxesFromFile(GString input)
 
     //if( QMessageBox::question(this, "PMF Import", "Filename suggests target table "+schema+"."+table+"\nImport?", QMessageBox::Yes, QMessageBox::No) != QMessageBox::Yes ) return;
 
-
+    deb(__FUNCTION__, "calling fill(1)");
     int index = schemaCB->fill(m_pDSQL, schema, 0);
     if( index < 0 )
     {
+        deb(__FUNCTION__, "calling fill(2)");
         schemaCB->fill(m_pDSQL, currentSchema, m_iHideSysTables);
         index = schemaCB->fill(m_pDSQL, schema, 0);
     }
@@ -1588,4 +1605,9 @@ int ImportBox::resetGeneratedCols()
         }
     }
     return 0;
+}
+
+void ImportBox::deb(GString fnName, GString txt)
+{
+    if( m_pGDeb ) m_pGDeb->debugMsg("ImportBox", 1, "::"+fnName+" "+txt);
 }

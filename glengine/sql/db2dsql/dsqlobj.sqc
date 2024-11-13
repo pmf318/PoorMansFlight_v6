@@ -200,6 +200,15 @@ dsqlobj::dsqlobj( dsqlobj const & aDSQL) //: IDSQL(aDSQL)
     iCost            = 0;
     _stopThread      = 0;
     m_iReadCLOBs     = 0;
+    connectOK        = 0;
+    rsOK             = 0;
+    iCommandOK       = 0;
+    iAffectedRows    = 0;
+    _crsSqldaptr     = NULL;
+    lobPointer       = NULL;
+    locVarcharPointer = NULL;
+    _threadActive    = NULL;
+
     m_iCharForBit    = aDSQL.m_iCharForBit;
     m_iTruncationLimit = aDSQL.m_iTruncationLimit;
     m_iGetResultAsHEX = aDSQL.m_iGetResultAsHEX;
@@ -420,6 +429,11 @@ GString dsqlobj::connect(CON_SET * pCs)
     return this->connect(pCs->DB, pCs->UID, pCs->PWD, pCs->Host, pCs->Port);
 }
 
+GString dsqlobj::reconnect(CON_SET *pCS)
+{
+    return connect(m_strDB, m_strUID, m_strPWD, m_strHost, m_strPort);
+}
+
 
 int dsqlobj::disconnect()
 {
@@ -438,7 +452,7 @@ void dsqlobj::setAutoCommmit(int commit)
 //************************ Start DSQL-BLOCK *******************************
 //*************************************************************************
 //*************************************************************************
-GString dsqlobj::initAll(GString message, unsigned long maxLines, int getLen )
+GString dsqlobj::initAll(GString message, long maxLines, int getLen )
 {
 
     /************
@@ -615,7 +629,7 @@ EXEC SQL CLOSE CRS3;
         //EXEC SQL FETCH cur1 INTO  :*sqldaptr;
         if( sqlca.sqlcode ) break;
         if( iStop ){tm("Received Stop"); break;}
-        if( maxLines > 0 && lines >= maxLines ) break;
+        if( maxLines >= 0 && lines >= maxLines ) break;
         pRow = new GRowHdl();
         tm("INT: Starting Lines, for: "+GString(iNumberOfColumns));
         for(i=0; i<iNumberOfColumns;++i)
@@ -4259,6 +4273,7 @@ int dsqlobj::getDataBases(GSeq <CON_SET*> *dbList)
         if( !nodeName.length() ) nodeName = _HOST_DEFAULT;
 
         pCS = new CON_SET;
+        pCS->init();
         pCS->DB = dbName;
         pCS->Host = nodeName;
         pCS->Type = "DB2";
@@ -5099,7 +5114,7 @@ void dsqlobj::getAvailableEncodings(GSeq<GString> *encSeq)
 ***************************************************************/
 
 /*
-GString dsqlobj::initAll_CLI(GString message, unsigned long maxRows, int getLen)
+GString dsqlobj::initAll_CLI(GString message, long maxRows, int getLen)
 {
     SQLRETURN ret = 0;
     deb("initAll: start. Msg: "+message);

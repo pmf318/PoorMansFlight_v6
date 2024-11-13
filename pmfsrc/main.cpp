@@ -30,6 +30,7 @@
 #include <QStyleFactory>
 #include <QMessageBox>
 
+
 #include <string>
 
 #ifndef PMF_VER
@@ -50,7 +51,7 @@ void saveInitFile(int x, int y, int w, int h);
 void checkGeometry(Pmf * mainApp);
 QRect getDefaultGeometry();
 GString getArgValue(int argc, char** argv, GString key);
-int setDarkPalette();
+PmfColorScheme setDarkPalette();
 
 QPalette pmfDarkPalette;
 
@@ -112,19 +113,44 @@ LPDWORD lpOldMode = 0;
 SetErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX);
 SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFILEERRORBOX, lpOldMode);
 #endif
+
+	//This needs to be called before QApplication: If needed, it will set "windows:darkmode=0"
+	GString style = Helper::getSensibleStyle();
+    QApplication app(argc, argv);
+	
     QSettings settings(_CFG_DIR, "pmf6");
+    GString prevStyle = settings.value("style", "").toString();
+
+    //Disable DarkMode completely if user does not want it.
+    if( (prevStyle.length() && !prevStyle.occurrencesOf(_DARK_THEME)) || !Helper::isSystemDarkPalette())
+    {
+        qputenv("QT_QPA_PLATFORM", "windows:darkmode=0");
+		//qApp->setPalette(qApp->style()->standardPalette());
+    }
+
+    //GString style = Helper::getSensibleStyle();
+    printf("main: Got %s as sensible style\n", (char*) style);
+	if( style.occurrencesOf(_DARK_THEME) ) style = style.stripTrailing(_DARK_THEME);
+    printf("main: calling QStyleFactory::create for (cleaned) style %s \n", (char*) style);
+	//QApplication needs to be called before calling QStyleFactory
+    QStyle * qStyle = QStyleFactory::create(style);
+    if( qStyle == NULL ) printf("Style %s is not valid.\n", (char*) style);
+    else
+    {
+        printf("main: Setting (cleaned) style: %s \n", (char*) style);
+        QApplication::setStyle(qStyle);
+    }
+
+	
+
     if( settings.value("font", -1).toInt() >= 0 )
     {
         QFont f;
         f.fromString(settings.value("font").toString());
+        //f.setStyleStrategy(QFont::NoAntialias);
+        //f.setHintingPreference(QFont::PreferFullHinting);
         QApplication::setFont(f);
     }
-	QApplication app(argc, argv);
-	#ifdef MAKE_VC
-	QApplication::setStyle("plastique");
-	#else
-	QApplication::setStyle("plastique");
-	#endif	
 
     QString message;
 
@@ -182,9 +208,12 @@ SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFI
 
         Pmf pmf(pGDeb, threaded);
         app.installEventFilter(new myEventFilter(&app, &pmf));
+		//!Dark
+		/* 
         pmfDarkPalette = qApp->palette(&pmf);
-        int res = setDarkPalette();
+        PmfColorScheme res = setDarkPalette();
         pmf.setColorScheme(res, pmfDarkPalette);
+		*/
         pGDeb->debugMsg("main", 1, "Creating pmf...OK");
 		GString ver = GString(PMF_VER);
         pGDeb->debugMsg("main", 1, "version: "+ver);
@@ -213,9 +242,12 @@ SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFI
 #endif
             int posX, posY, width, height;
             pmf.getGeometry(&posX, &posY, &width, &height);
-            if( posY + height > screenGeometry.height() || posX + width >screenGeometry.width() || posX < 0 || posY < 0 || pmf.windowState() == Qt::WindowMaximized)
+            if( posY + height > screenGeometry.height() || posX + width >screenGeometry.width()
+                    || posX < 0 || posY < 0 || pmf.windowState() == Qt::WindowMaximized
+                    || width < 1024 || height < 768 )
             {
-                pmf.setGeometry(30, 50, screenGeometry.width()-60, screenGeometry.height()-100);
+                printf("Setting Geometry: x: %i, y: %i, w: %i, h: %i\n", 30, 50, min(screenGeometry.width()-60, 1200), min(screenGeometry.height()-100, 900));
+                pmf.setGeometry(30, 50, min(screenGeometry.width()-60, 1200), min(screenGeometry.height()-100, 900));
             }
         }
 
@@ -227,12 +259,16 @@ SetThreadErrorMode(SEM_FAILCRITICALERRORS | SEM_NOGPFAULTERRORBOX | SEM_NOOPENFI
         QString prevStyle = settings.value("style", "").toString();
         //if( prevStyle.length() == 0  )
         {
-            if( col.red() < 99 && col.green() < 99 && col.blue() < 99 )pmf.setColorScheme(0, pmfDarkPalette);
+            //if( col.red() < 99 && col.green() < 99 && col.blue() < 99 )pmf.setColorScheme(PmfColorScheme::None, pmfDarkPalette);
+            //!Dark if( Helper::isSystemDarkPalette() ) pmf.setColorScheme(PmfColorScheme::NewDark, pmfDarkPalette);
         }
-
+        int x, y, w, h;
+        pmf.getGeometry(&x, &y, &w, &h);
+        printf("Geometry: x: %i, y: %i, w: %i, h: %i\n", x, y, w, h);
         pmf.show();
 #ifndef MAKE_VC
-        pmf.loginClicked();
+
+        //pmf.loginClicked();
 #endif		
         pGDeb->debugMsg("main", 1, "calling exec()");
         //foo.setPalette( fusionDarkPalette );
@@ -293,8 +329,8 @@ QRect getDefaultGeometry()
 {
     int x = 60;
     int y = 60;
-    int w = 1000;
-    int h = 700;
+    int w = 1200;
+    int h = 900;
 #if QT_VERSION >= 0x060000
     QScreen *widget = QGuiApplication::primaryScreen();
     QRect screen = widget->availableGeometry();
@@ -303,8 +339,8 @@ QRect getDefaultGeometry()
     QRect screen = widget.availableGeometry(widget.primaryScreen());
 #endif
 
-    h = max(h, screen.height()-y);
-    w = max(w, screen.width()-x);
+    h = min(h, screen.height()-y);
+    w = min(w, screen.width()-x);
     return QRect(x, y, w, h);
 }
 
@@ -344,18 +380,24 @@ void saveInitFile(int x, int y, int w, int h)
 	f.overwrite(&aSeq);
 }
 
-int setDarkPalette()
+PmfColorScheme setDarkPalette()
 {
 
     QSettings settings(_CFG_DIR, "pmf6");
+#if QT_VERSION >= 0x060000
+    if( Helper::isSystemDarkPalette() ) return PmfColorScheme::NewDark;
+#endif
 
-
+	return PmfColorScheme::Standard;
+	
+	
     QString prevStyle = settings.value("style", "<notSet>").toString();
+    GString prev = prevStyle;
     if( !GString(prevStyle).occurrencesOf(_DARK_THEME))
     {        
-        return 1;
+        return PmfColorScheme::Standard;
     }
-    GString prev = prevStyle;
+
     qApp->setStyle(QStyleFactory::create(prev.subString(1, prev.indexOf(_DARK_THEME)-1)));
 
     qApp->setStyle(QStyleFactory::create(prevStyle));
@@ -382,5 +424,5 @@ int setDarkPalette()
 
     qApp->setPalette(pmfDarkPalette);
     qApp->setStyleSheet("QToolTip { color: #ffffff; background-color: #2a82da; border: 1px solid white; }");
-    return 0;
+    return PmfColorScheme::None;
 }

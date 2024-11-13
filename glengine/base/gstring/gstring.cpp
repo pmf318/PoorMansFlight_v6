@@ -846,6 +846,7 @@ GString GString::change(GString oldStr, GString newStr)
 {
     GString ret, org;
     org = GString(ptr);
+    if( !oldStr.length() ) return org;
     while( org.occurrencesOf( oldStr ) > 0 )
     {
         ret += org.subString(1, org.indexOf(oldStr) - 1 );
@@ -1646,6 +1647,30 @@ GSeq <GString> GString::split(GString token)
     return aSeq;
 }
 
+GString GString::makePretty()
+{
+    unsigned long i, size;
+    size = strlen(ptr);
+    if( 0 == size ) return *this;
+
+    char * tmp = new char[size+1];
+	int j = 0;
+    for( i = 0; i < size; ++ i )
+    {
+		if( (ptr[i] >= 'A' && ptr[i] <= 'Z' ) || (ptr[i] >= 'a' && ptr[i] <= 'z' ) || (ptr[i] >= '0' && ptr[i] <= '9' ) || ptr[i] == 10 || ptr[i] == 13 || ptr[i] == ' ')
+		//if( (ptr[i] >= 32 || ptr[i] == 10 || ptr[i] == 13 ) && ptr[i] < 128 ) 
+		{
+			printf("Adding: %c, as int: %i\n",ptr[i], (int) ptr[i]); 
+			tmp[j] =  ptr[i];
+			j++;
+		}
+    }
+    memcpy(ptr, tmp, j);
+    ptr[j] = 0;
+    delete []tmp;
+    tm("Member reverse()...Done.");
+    return *this;	
+}
 
 //GSeq <GString> GString::split(GString tokenList)
 //{

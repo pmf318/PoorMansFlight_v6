@@ -201,6 +201,7 @@ int EditDoubleByte::loadDoubleByteData()
 
     if( err || m_pIDSQL->rowElement(1,1) == "@OutOfReach" ) setSrcData("[PMF: Invalid data. Try refreshing the table.]", 0);
     else setSrcData(m_pIDSQL->cleanString(m_pIDSQL->rowElement(1,1)),  m_pIDSQL->isBinary(1,1));
+    m_pIDSQL->setCLOBReader(0);
     return 0;
 }
 
@@ -255,9 +256,11 @@ void EditDoubleByte::updateDB()
         GString data = "'"+this->data()+"'";
         if( m_iType == CT_STRING || m_iType == CT_CLOB) m_pIDSQL->convToSQL(data);
 
-        if( data.length() <= 32000 && m_iType != 4)
+        if( data.length() <= 32000 && m_iType != 4 /*&& data.occurrencesOf('\t') == 0*/ )
         {
             GString cmd = "UPDATE "+m_Master->currentTable()+" SET "+m_strColName+"="+data+" " +constraint;
+            printf("data: %s\n", (char*) data);
+            printf("CMD: %s\n", (char*) cmd);
             err = m_pIDSQL->initAll(cmd);
             if( err.length() ) msg(err);
         }

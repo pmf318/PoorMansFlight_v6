@@ -25,7 +25,7 @@ class TableSize : public QDialog
 {
    Q_OBJECT
 public:
-    TableSize(DSQLPlugin* pDSQL, QWidget *parent=0, GString currentSchema ="", int hideSysTabs = 0);
+    TableSize(GDebug *pGDeb, DSQLPlugin* pDSQL, QWidget *parent=0, GString currentSchema ="", int hideSysTabs = 0);
    ~TableSize();
    short fillLV();
    void setSchema(GString aTabSchema);
@@ -37,14 +37,17 @@ private slots:
     void sortClicked(int);
 private:
    void tm(GString message);
+   void deb(GString fnName, GString txt);
    GString iTabName, iTabSchema;
    QPushButton * ok, * rstatB, *tbsDetB;
    QTableWidget* mainLV;
    QLabel * info;
+   GDebug * m_pGDeb;
    PmfSchemaCB * schemaCB;
    void setVHeader();
    DSQLPlugin* m_pDSQL;
    int m_iHideSysTabs;
+
 
 };
 

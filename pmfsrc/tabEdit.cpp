@@ -1,6 +1,7 @@
 
 #include "tabEdit.h"
 #include "extSQL.h"
+#include "editConn.h"
 #include <QtGui>
 #include <QGraphicsDropShadowEffect>
 
@@ -61,6 +62,7 @@
 #include "pmfTable.h"
 #include "gkeyval.hpp"
 #include "connectionInfo.h"
+#include "connSet.h"
 
 
 //Colors:
@@ -78,15 +80,24 @@ QColor _ColorUpd = QColor(184, 251, 218);
 QColor _ColorApos = QColor(255, 204, 157);
 QColor _ColorAposDark = QColor(102, 26, 0);
 QColor _ColorBlanks = QColor(185, 237, 178);
-QColor _ColorBlanksDark = QColor(128, 32, 0);
 QColor _ColorBlanksInside = QColor(230, 255, 255);
+//QColor _ColorBlanksDark = QColor(128, 32, 0);
+QColor _ColorBlanksDark = QColor(0, 56, 68);
+
+QColor _ColorInsDark = QColor(81, 104, 123);
+QColor _ColorUpdDark = QColor(97, 125, 99);
 
 QColor _ColorCRLF = QColor(250,177,42);
-QColor _ColorCRLFDark = QColor(235,87,121);
+QColor _ColorCRLFDark = QColor(42, 84, 62);
 
 
 QString _qstrColorOdd = "#FAF7D4";
 QString _qstrColorEven =  "#FFFFFF";
+
+
+
+
+
 
 #ifndef min
 #define  min(a,b) (a < b ? a : b)
@@ -109,7 +120,7 @@ TabEdit::TabEdit(DSQLPlugin * pDSQL, QTableWidget *tabWdgt, GDebug *pGDeb)
     m_pMainDSQL = pDSQL;
     schemaCB = NULL;
     tableCB = NULL;
-    m_iUseColorScheme = 0;
+    m_iUseColorScheme = PmfColorScheme::None;
 }
 
 
@@ -119,6 +130,7 @@ TabEdit::TabEdit(Pmf* pPMF, QWidget* parent, int tabIndex, GDebug *pGDeb, int us
     m_iUseThread = useThread;
     m_iUseColorScheme = pPMF->getColorScheme();
 
+    changePalette();
     if( pPMF->getConnection()->getDBType() == SQLSERVER )
     {
         contextCB = new QComboBox(this);
@@ -147,7 +159,7 @@ TabEdit::TabEdit(Pmf* pPMF, QWidget* parent, int tabIndex, GDebug *pGDeb, int us
     //dbNamePB = new QLineEdit(this);
     dbNamePB = new QPushButton(this);
     //dbNamePB->setReadOnly(true);
-    if( m_iUseColorScheme ) dbNamePB->setStyleSheet(_BgYellow);
+    if( m_iUseColorScheme == PmfColorScheme::Standard ) dbNamePB->setStyleSheet(_BgYellow);
     connect(dbNamePB, SIGNAL(clicked(bool)), SLOT(showDbConnInfo()));
     //connect(dbNameCB, SIGNAL(activated(int)), SLOT(slotDBNameSelected()));
 
@@ -214,7 +226,8 @@ TabEdit::TabEdit(Pmf* pPMF, QWidget* parent, int tabIndex, GDebug *pGDeb, int us
     m_mainGrid->addWidget(singleRowCHK, 0, 6);
     */
     //Row 1
-    QGroupBox * upperBox = new QGroupBox();
+    upperBox = new QGroupBox();
+    connect(upperBox, SIGNAL(clicked()), SLOT(upperGroupBoxClicked()));
     //upperBox->setStyleSheet("border:0;");
     QHBoxLayout *upperLayout = new QHBoxLayout;
     schemaCB->setMinimumWidth(120);
@@ -295,7 +308,6 @@ TabEdit::TabEdit(Pmf* pPMF, QWidget* parent, int tabIndex, GDebug *pGDeb, int us
 
 
     m_iLockAll = 0;
-    m_lMaxRows = 2000;
     m_pExtSQL = NULL;
     m_pGetCLP = NULL;
     m_pShowXML = NULL;
@@ -431,13 +443,13 @@ void TabEdit::addInfoGrid(QGridLayout* pGrid)
 
     updLE = new QLineEdit(this);
     updLE->setMaximumWidth(40);
-    if( m_iUseColorScheme ) updLE->setStyleSheet(_BgWhite);
+    if( m_iUseColorScheme == PmfColorScheme::Standard) updLE->setStyleSheet(_BgWhite);
     insLE = new QLineEdit(this);
     insLE->setMaximumWidth(40);
-    if( m_iUseColorScheme ) insLE->setStyleSheet(_BgWhite);
+    if( m_iUseColorScheme == PmfColorScheme::Standard) insLE->setStyleSheet(_BgWhite);
     msgLE = new QLineEdit(this);
 
-    if( m_iUseColorScheme ) msgLE->setStyleSheet("background: white;");
+    if( m_iUseColorScheme == PmfColorScheme::Standard) msgLE->setStyleSheet("background: white;");
     /* White background, grey foreground
     updLE->setEnabled(false);
     insLE->setEnabled(false);
@@ -446,7 +458,7 @@ void TabEdit::addInfoGrid(QGridLayout* pGrid)
     updLE->setReadOnly(true);
     insLE->setReadOnly(true);
     msgLE->setReadOnly(true);
-    if( m_iUseColorScheme ) msgLE->setStyleSheet(_FgBlue);
+    if( m_iUseColorScheme == PmfColorScheme::Standard) msgLE->setStyleSheet(_FgBlue);
 
 
     QLabel *updText = new QLabel("Pending Updates:", this);
@@ -464,7 +476,10 @@ void TabEdit::addInfoGrid(QGridLayout* pGrid)
 
     lowerBox->setLayout(lowerLayout);
 
-    pGrid->addWidget(lowerBox, 7,0,1,10);
+    pGrid->addWidget(lowerBox, 7,0,1,8);
+    createInfoArea();
+    pGrid->addWidget(reconnectInfoBox, 7, 8, 1, 2);
+
 
 }
 /*****************************************************
@@ -599,7 +614,7 @@ void TabEdit::test()
 }
 /*****************************************************
 * Default sort order is ascending.
-* Clicking the same vertical header twice reverses the sort order
+* Clicking the same horizontal header twice reverses the sort order
 *****************************************************/
 void TabEdit::sortClicked(int pos)
 {
@@ -829,11 +844,8 @@ void  TabEdit::popUpActions(const QPoint & p)
         pColumnsUpdateAction->lineEdit()->selectAll();
         pColumnsUpdateAction->lineEdit()->setText("");
 
-        if( m_pMainDSQL->getDBTypeName() != _POSTGRES )
-        {
-            actionsMenu.addSeparator();
-            actionsMenu.addAction( m_qaDelTabAll );
-        }
+        actionsMenu.addSeparator();
+        actionsMenu.addAction( m_qaDelTabAll );
         actionsMenu.addSeparator();
         //updateMenu.addAction(pLineEditUpdateAction);
         //actionsMenu.addMenu(&updateMenu);
@@ -959,7 +971,7 @@ void TabEdit::createUserActions(QMenu * menu)
     QDir dir(userActionsDir());
     QStringList files = dir.entryList(QDir::Files);
     int i;
-    for( i = 0; i < files.size() && i < MaxUserActions; ++i )
+    for( i = 0; i < files.size() && i < MaxUserActions-1; ++i )
     {
         m_qaUserActions[i] = new QAction(this);
         m_qaUserActions[i]->setText(files.at(i));//Name of the file
@@ -1655,6 +1667,7 @@ int TabEdit::createNewRow(int rowPos)
         else if( colType(i-1) == 2 ) newVal = "";  //TODO: ColType by name, not idx
 
         newItem = new QTableWidgetItem( newVal );
+        deb(__FUNCTION__, "Col #"+GString(i)+" - "+GString(colName)+", newVal: "+GString(newVal));
 
         mainWdgt->setItem(rowPos+1, i, newItem);
     }
@@ -1891,7 +1904,7 @@ void TabEdit::timerCalled()
 
     return;
 }
-void TabEdit::timerEvent(QTimerEvent*)
+void TabEdit::versionCheckTimerEvent(QTimerEvent*)
 {
     /*
     if( m_ulTimerEvts % 2 ) cancelB->setText("Click...");
@@ -1903,7 +1916,7 @@ void TabEdit::timerEvent(QTimerEvent*)
 
 void TabEdit::MyThread::run()
 {
-    myTabEdit->initDSQL();
+    myTabEdit->initDSQL(myTabEdit->getMaxRows());
 }
 
 
@@ -1914,7 +1927,7 @@ void TabEdit::MyThread::run()
 static unsigned __stdcall threadedFn(void *p)
 {
     TabEdit* pTE = static_cast<TabEdit* >(p);
-    pTE->initDSQL();
+    pTE->initDSQL(pTE->getMaxRows());
     _threadRunning = 0;
     return 0;
 }
@@ -1925,12 +1938,12 @@ static unsigned __stdcall threadedFn(void *p)
 void *TabEdit::threadedStuff(void * arg)
 {
     TabEdit* pTE = static_cast<TabEdit* >(arg);
-    pTE->initDSQL();
+    pTE->initDSQL(pTE->getMaxRows());
     _threadRunning = 0;
     return NULL;
 }
 
-void TabEdit::reload(GString cmd)
+void TabEdit::reload(GString cmd, long maxRows)
 {
     deb(__FUNCTION__, "start");
     if( !cmd.length() && cmdLineLE->toPlainText().length() ) cmd = cmdLineLE->toPlainText();
@@ -1939,7 +1952,7 @@ void TabEdit::reload(GString cmd)
     addToStoreCB(cmd);
     m_gstrSQLCMD = cmd;
     deb(__FUNCTION__, "getting maxRows...");
-    m_lMaxRows = maxRows();
+    if( maxRows < 0 ) maxRows = getMaxRows();
 
     /*******************************
     * Start a timer to set text on cancelButton
@@ -1957,7 +1970,6 @@ void TabEdit::reload(GString cmd)
         if( _threadRunning ) return;
         _threadRunning = 1;
         _gstrSQLCMD = cmd;
-        _lMaxRows = maxRows();
         m_iTimerDirections = 1;
         m_tmrWaitTimer->start( 1000 );
         //This calls tabEdit::MyThread::run(), i.e., the thread starts.
@@ -1988,16 +2000,16 @@ void TabEdit::reload(GString cmd)
                 {
                     if( deleteViaFetchFromCmdLE(cmd) )
                     {
-                        initDSQL();
+                        initDSQL(maxRows);
                     }
                     else
                     {
                         cmdLineLE->setText("");                        
-                        initDSQL();
+                        initDSQL(maxRows);
                     }
                 }
             }
-            else initDSQL();
+            else initDSQL(maxRows);
         } catch(...){msg("Reload/initDSQL: Got Exception");}
         deb(__FUNCTION__, "calling showData....");
         readColumnDescription(currentTable());
@@ -2027,6 +2039,7 @@ int TabEdit::isIdentityColumn(GString colName)
     {
         if( m_colDescSeq.elementAtPosition(i)->ColName == colName )
         {
+            deb(__FUNCTION__, "checking "+colName+", Misc: "+ m_colDescSeq.elementAtPosition(i)->Misc);
             if( m_colDescSeq.elementAtPosition(i)->Misc.occurrencesOf("IDENTITY") ) return 1;
             if( m_colDescSeq.elementAtPosition(i)->Identity == "Y" ) return 1;
         }
@@ -2044,7 +2057,8 @@ void TabEdit::readColumnDescription(GString table)
     delete qDSQL;
     deb(__FUNCTION__, "readColumnDescription for table "+table+", done");
 }
-void TabEdit::initDSQL()
+
+void TabEdit::initDSQL(long maxRows)
 {
     deb(__FUNCTION__, "start");
     //////////////////////////////////
@@ -2065,13 +2079,13 @@ void TabEdit::initDSQL()
         deb(__FUNCTION__, "threaded init start");
         //_staticDSQL.setDebug(m_iDebug);
         //_gstrSQLError = _staticDSQL.initAll(_gstrSQLCMD, _lMaxRows);
-        m_gstrSqlErr = m_pMainDSQL->initAll(m_gstrSQLCMD, m_lMaxRows);
+        m_gstrSqlErr = m_pMainDSQL->initAll(m_gstrSQLCMD, maxRows);
         deb(__FUNCTION__, "threaded init done");
     }
     else
     {
         deb(__FUNCTION__, "initialising...");
-        m_gstrSqlErr = m_pMainDSQL->initAll(m_gstrSQLCMD, m_lMaxRows);
+        m_pMainDSQL->initAll(m_gstrSQLCMD, maxRows);
         deb(__FUNCTION__, "initialised, err: "+m_gstrSqlErr);
     }
 
@@ -2290,7 +2304,7 @@ void TabEdit::showData()
     //for( int i = 0; i < mainWdgt->rowCount(); ++i ) mainWdgt->resizeRowToContents ( i ) ;
     deb(__FUNCTION__, "5");
 
-    if( i >= maxRows() ) setInfo("Result was cut at "+GString(i)+" rows, Cost: "+GString(m_pMainDSQL->getCost())+" [Timerons]", 1);
+    if( i >= getMaxRows() ) setInfo("Result was cut at "+GString(i)+" rows, Cost: "+GString(m_pMainDSQL->getCost())+" [Timerons]", 1);
     else setInfo("Displayed rows: "+GString(i)+", Cost: "+GString(m_pMainDSQL->getCost())+" [Timerons]");
     deb(__FUNCTION__, "done");
 
@@ -2446,21 +2460,21 @@ int TabEdit::addColorizedHints(int col, QTableWidgetItem *pItem, GString data)
     }
     else if(data[1] == '\'' || data[data.length()] == '\'')
     {
-        if( m_iUseColorScheme )setBackGrdColor(pItem, _ColorApos);
+        if( m_iUseColorScheme == PmfColorScheme::Standard)setBackGrdColor(pItem, _ColorApos);
         else setBackGrdColor(pItem, _ColorAposDark);
         pItem->setToolTip("Apostrophe at start/end of data. Intentional?");
         ret = 1;
     }
     else if( (data[1] == ' ' || data[data.length()] == ' ') && !m_pMainDSQL->isFixedChar(col) )
     {
-        if( m_iUseColorScheme )setBackGrdColor(pItem, _ColorBlanks);
+        if( m_iUseColorScheme == PmfColorScheme::Standard)setBackGrdColor(pItem, _ColorBlanks);
         else setBackGrdColor(pItem, _ColorBlanksDark);
         pItem->setToolTip("Blank(s) at start/end of data. Intentional?");
         ret = 1;
     }
     else if( data.occurrencesOf(' ') && !m_pMainDSQL->isXMLCol(col) && !m_pMainDSQL->isFixedChar(col) && !m_pMainDSQL->isDateTime(col) )
     {
-        if( m_iUseColorScheme )setBackGrdColor(pItem, _ColorBlanksInside);
+        if( m_iUseColorScheme == PmfColorScheme::Standard)setBackGrdColor(pItem, _ColorBlanksInside);
         else setBackGrdColor(pItem, _ColorBlanksDark);
         pItem->setToolTip("Blank(s) inside data. Intentional?");
         ret = 1;
@@ -3010,12 +3024,16 @@ GString TabEdit::insertRow(QTableWidgetItem* pItem, DSQLPlugin * pDSQL)
         deb(__FUNCTION__, "Col #"+GString(i)+", SqlType: "+GString(m_pMainDSQL->sqlType(i)));
         newVal = Helper::formatItemText(m_pMainDSQL, mainWdgt->item(pItem->row(), i+1)).strip();
         if( !newVal.length() || newVal == "NULL" ) continue;
-        pDSQL->convToSQL(newVal); //Replace "'" with "''"
+        if( !m_pMainDSQL->isForBitCol(i) ) pDSQL->convToSQL(newVal); //Replace "'" with "''"
 
 
         if( newVal.strip().strip("'").strip().occurrencesOf("@DSQL@CHAR_AS_BIT") ) newVal = "''";
         else if( newVal.strip().strip("'").strip().occurrencesOf("@DSQL@") ) newVal = "?";
-        else if( m_pMainDSQL->isForBitCol(i) >= 3 && GString(newVal).upperCase() != "NULL" && newVal.strip().length() )newVal = Helper::formatForHex(pDSQL, mainWdgt->item(pItem->row(), i+1));
+        else if( m_pMainDSQL->isForBitCol(i) >= 3 && GString(newVal).upperCase() != "NULL" && newVal.strip().length() )
+        {
+            //newVal = Helper::formatForHex(pDSQL, mainWdgt->item(pItem->row(), i+1));
+            newVal = Helper::handleGuid(pDSQL, newVal, isChecked(_CONVERTGUID));
+        }
 
         if( newVal.occurrencesOf(_PMF_IS_LOB) ) newVal="?";
         else if (newVal == _IDENTITY || isIdentityColumn(m_pMainDSQL->hostVariable(i)) ) newVal = "";
@@ -3224,7 +3242,8 @@ void TabEdit::tableSelected()
     cmdLineLE->setText("");
     if( currentTable(0).strip().length() == 0 ) return;
     setMyTabText(currentTable(0));
-    reload("SELECT * FROM "+currentTable());
+
+    reload("SELECT * FROM "+currentTable(), isChecked(_AUTOLOADTABLE) ? -1 : 0);
     addToCmdHist("SELECT * FROM "+currentTable());
 
     waitForThread();
@@ -3232,7 +3251,7 @@ void TabEdit::tableSelected()
     loadCmdHist();
 }
 void TabEdit::popupTableCB()
-{
+{    
     tableCB->showPopup();
 }
 
@@ -3588,7 +3607,7 @@ void TabEdit::qdeb(QString s)
 /*****************************************************
 *
 *****************************************************/
-unsigned int TabEdit::maxRows()
+unsigned int TabEdit::getMaxRows()
 {
     if( GString(maxRowsLE->text()).asInt() == 0 ) maxRowsLE->setText("2000");
     GString(maxRowsLE->text()).asLong();
@@ -3940,10 +3959,16 @@ void TabEdit::setActionsMenu(QTableWidgetItem *pItem)
 /*****************************************************
 *
 *****************************************************/
-void TabEdit::fillDBNameLE(GString dbName)
+void TabEdit::fillDBNameLE(GString dbName, GString color)
 {
-
     dbNamePB->setText(dbName+" ["+m_pMainDSQL->getDBTypeName()+"]");
+    if( color.length() )
+    {
+        QString col = "background-color: ";
+        col += (char*) color;
+        dbNamePB->setStyleSheet(col);
+    }
+    else dbNamePB->setStyleSheet(_BgYellow);
     /*
     if( dbName.strip().length() == 0)
     {
@@ -4009,16 +4034,16 @@ void TabEdit::setInfo(GString txt, int blink)
         int i = 4;
         while(i--)
         {
-            if( m_iUseColorScheme ) msgLE->setStyleSheet(_BgRed);
+            if( m_iUseColorScheme == PmfColorScheme::Standard) msgLE->setStyleSheet(_BgRed);
             msgLE->repaint();
             GStuff::dormez(100);
-            if( m_iUseColorScheme ) msgLE->setStyleSheet(_BgWhite);
+            if( m_iUseColorScheme == PmfColorScheme::Standard) msgLE->setStyleSheet(_BgWhite);
             msgLE->repaint();
             GStuff::dormez(100);
         }
-        if( m_iUseColorScheme ) msgLE->setStyleSheet(_FgRed);
+        if( m_iUseColorScheme == PmfColorScheme::Standard) msgLE->setStyleSheet(_FgRed);
     }
-    else if( m_iUseColorScheme )
+    else if( m_iUseColorScheme == PmfColorScheme::Standard)
     {
         msgLE->setStyleSheet(_FgBlue);
     }
@@ -4035,11 +4060,13 @@ void TabEdit::showHint(int hint, GString txt)
         hintLE->hide();
         return;
     }
+	
     switch(hint)
     {
     case hintXML:
         hintLE->setText("Hint: Drag and drop files into cells to INSERT or UPDATE LOBs/XMLs or right-click a cell to edit/save LOBs and XMLs");
-        if( m_iUseColorScheme ) hintLE->setStyleSheet(_BgYellow);
+        if( !Helper::isSystemDarkPalette()) hintLE->setStyleSheet(_BgYellow);
+		else hintLE->setStyleSheet("background: rgb(99, 90, 10)");
         break;
     case hintNewVer:
         hintLE->setTextInteractionFlags(Qt::LinksAccessibleByMouse);
@@ -4050,20 +4077,24 @@ void TabEdit::showHint(int hint, GString txt)
         //            hintLE->setOpenExternalLinks(true);
         //            hintLE->setText("Hint: A new version ("+txt+") is available at <a href='http://leipelt.org/downld.html'>www.leipelt.org</a>");
         //#endif
-        if( m_iUseColorScheme ) hintLE->setStyleSheet(_NewVersColor);
+        if( !Helper::isSystemDarkPalette()) hintLE->setStyleSheet(_NewVersColor);
+        else hintLE->setStyleSheet("background: rgb(115, 17, 6)");
         break;
     case hintMultiCellEdit:
         hintLE->setText("Hint: Select multiple cells vertically, right-click and fill 'Set cells' to update the cells");
-        if( m_iUseColorScheme ) hintLE->setStyleSheet(_BgYellow);
+        if( !Helper::isSystemDarkPalette()) hintLE->setStyleSheet(_BgYellow);
+        else hintLE->setStyleSheet("background: rgb(20, 69, 20)");
         break;
 
     case hintColorHint:
         hintLE->setText("Hint: Cells containing blanks will be marked in different colors. Hover the mouse over a colorized cell to see the tooltip.");
-        if( m_iUseColorScheme ) hintLE->setStyleSheet(_BgBlue);
+        if( !Helper::isSystemDarkPalette()) hintLE->setStyleSheet(_BgBlue);
+        else hintLE->setStyleSheet("background: rgb(6, 31, 74)");
         break;
 
     default:
-        if( m_iUseColorScheme ) hintLE->setStyleSheet(_BgYellow);
+        if( !Helper::isSystemDarkPalette()) hintLE->setStyleSheet(_BgYellow);
+        else hintLE->setStyleSheet("background: rgb(20, 69, 20)");
         hintLE->setText("Hint: right-click a cell to filter data ");
         hintLE->setText("Hint: open another tab with CTRL+T, use CTRL+W to close");
         hintLE->setText("Hint: to edit XML data, right-click the XML cell");
@@ -4528,6 +4559,7 @@ void TabEdit::slotRightClickUpdate()
     m_pExtSQL->setCmd(cmd, orgFilter);
     m_pExtSQL->findText(placeHolder);
     m_pExtSQL->show();
+    delete m_pExtSQL;
     /*
     m_pExtSQL->exec();
     if( orgFilter.length())
@@ -4571,6 +4603,7 @@ void TabEdit::slotRightClickDeleteTable()
     else err = pDSQL->initAll("Delete from "+currentTable());
     if( err.length() ) msg(err);
     else okClick();
+    delete pDSQL;
 }
 
 void TabEdit::slotLineEditUpdate()
@@ -4742,6 +4775,7 @@ void TabEdit::addToCmdHist(GString cmd)
 void TabEdit::slotDBNameSelected()
 {
     CON_SET* pCS = new CON_SET;
+    pCS->init();
     m_pMainDSQL->currentConnectionValues(pCS);
     if( pCS )
     {
@@ -4806,6 +4840,11 @@ GString TabEdit::histFileName()
     f.close();
 
     return  out+"_"+db;
+}
+
+void TabEdit::upperGroupBoxClicked()
+{
+    msg("Have click");
 }
 
 /******************************************************
@@ -5060,6 +5099,7 @@ GString TabEdit::createUniqueColConstraintForItem(QTableWidgetItem* pItem, GSeq 
     {
         col = wrap(unqCols->elementAtPosition(i));
         colNr = m_pMainDSQL->positionOfHostVar(unqCols->elementAtPosition(i));
+        if( colNr == 0 ) continue;
         //msg("unqiqueCol: "+col);
         val = m_pMainDSQL->rowElement(rowNr, colNr);
         if( m_pMainDSQL->isForBitCol(colNr) >= 3 && val != "NULL" ) val = Helper::formatForHex(m_pMainDSQL, val);
@@ -5093,15 +5133,17 @@ int TabEdit::writeDataToFile(QTableWidgetItem* pItem, GString file, int * outSiz
     *outSize = 0;
     if( !pItem ) return 1;
 
-    if( currentTable().length() < 2 || !mainWdgt->item(pItem->row(), 1) )
+    if( !mainWdgt->item(pItem->row(), 1) )
     {
-        msg("Please open a table first");
+        msg("No data. Do a SELECT or open a table.");
+        delete pDSQL;
         return 2;
     }
 
     GString txt = mainWdgt->item(pItem->row(), 1)->text();
     if( txt == _NEWMark || txt == _INSMark )
     {
+        delete pDSQL;
         return 0;
     }
 
@@ -5116,8 +5158,11 @@ int TabEdit::writeDataToFile(QTableWidgetItem* pItem, GString file, int * outSiz
     deb(__FUNCTION__, "CMD: "+cmd+", calling descrToFile");
     remove(file);
     GString err = m_pMainDSQL->descriptorToFile(cmd, file, outSize);
-
     if( err.length() )
+    {
+        if( writeDataToFile(file, outSize) )  erc = 1;
+    }
+    if( erc )
     {
         msg("Possibly wrong cell, right-click a cell containing valid LOB/XML data\n\nDetailed error: "+err);
         erc = 1;
@@ -5127,12 +5172,15 @@ int TabEdit::writeDataToFile(QTableWidgetItem* pItem, GString file, int * outSiz
         msg("The LOB has 0 bytes, no file was generated. ");
         erc = 1;
     }
+    delete pDSQL;
     return erc;
 }
 
-int TabEdit::writeDataToFile(GString cmd, GString file, int * outSize)
+int TabEdit::writeDataToFile(GString file, int * outSize)
 {
     *outSize = 0;
+    GString cmd = cmdLineLE->toPlainText();
+    if( cmd.strip().length() == 0 ) return 1;
     GString err = m_pMainDSQL->descriptorToFile(cmd, file, outSize);
     if( err.length() || !outSize)
     {
@@ -5175,6 +5223,7 @@ void TabEdit::slotRightClickSaveBlobPGSQL()
     GString fName = name;
     GString ret = pDSQL->descriptorToFile(cmd, fName, &outSize);
     if( ret.length() ) msg(pDSQL->sqlError());
+    delete pDSQL;
 }
 
 void TabEdit::slotRightClickLoadBlobPGSQL()
@@ -5189,6 +5238,7 @@ void TabEdit::slotRightClickLoadBlobPGSQL()
     GString cmd = "";
     int ret = pDSQL->uploadBlob(cmd, &fileList, &lobType);
     msg("New OID: "+GString(ret));
+    delete pDSQL;
 }
 
 void TabEdit::slotRightClickUnlinkBlobPGSQL()
@@ -5213,6 +5263,7 @@ void TabEdit::slotRightClickUnlinkBlobPGSQL()
 
     DSQLPlugin * pDSQL = new DSQLPlugin(*m_pMainDSQL);
     GString ret = pDSQL->allPurposeFunction(&aKV);
+    delete pDSQL;
 }
 
 void TabEdit::slotRightClickSaveBlob()
@@ -5413,6 +5464,22 @@ void TabEdit::slotRightClickActionEditGraphic()
 
 void TabEdit::slotRightClickActionEditDBClob()
 {
+    /*
+    QTableWidgetItem* pItem = m_pActionItem;
+    GString path = Helper::tempPath();
+    time_t now = time(0);
+    GString file = path + "PMF_XML_"+GString(now)+".TMP";
+    int outSize;
+    if( pItem->text() != "NULL")
+    {
+        int erc = 0;
+        if( cmdLineLE->toPlainText().length() ) erc = writeDataToFile(cmdLineLE->toPlainText(), file, &outSize);
+        if( erc || !cmdLineLE->toPlainText().length() ) erc = writeDataToFile(pItem, file, &outSize);
+        if( erc ) msg("Cannot create temp-file in "+path+". Maybe running PMF as Admin might help.");
+    }
+    m_pShowXML = new ShowXML(m_pGDeb, this, pItem, file, m_strLastXmlSearchString);
+    m_pShowXML->show();
+    */
     loadDoubleByteEditor();
 }
 
@@ -5427,14 +5494,23 @@ void TabEdit::loadDoubleByteEditor(int type)
     if( type < 0 ) type = m_pMainDSQL->simpleColType(colPos);
     deb(__FUNCTION__, "creating EditDoubleByte...");
     EditDoubleByte* edit = new EditDoubleByte(m_pGDeb, this, pItem, m_pMainDSQL, type);
-    if( edit->loadData() ) return;
+    if( edit->loadData() )
+    {
+        delete edit;
+        return;
+    }
     deb(__FUNCTION__, "pre modal...");
     edit->setWindowModality(Qt::ApplicationModal);
     edit->exec();
     deb(__FUNCTION__, "modal done");
-    if( !edit->runRefresh() ) return;
+    if( !edit->runRefresh() )
+    {
+        delete edit;
+        return;
+    }
     if( cmdLineLE->toPlainText().length() ) reload(cmdLineLE->toPlainText());
     else reload("SELECT * FROM "+currentTable());
+    delete edit;
     deb(__FUNCTION__, "end");
 }
 
@@ -5446,7 +5522,7 @@ void TabEdit::slotRightClickActionShowXML()
     if( !pItem ) return;
     setItemSelected(pItem);
 
-    int erc;
+    int erc = 0;
     if( m_pShowXML ) //Already open
     {
         //QEvent event(QEvent::WindowActivate);
@@ -5466,7 +5542,7 @@ void TabEdit::slotRightClickActionShowXML()
     int outSize;
     if( pItem->text() != "NULL")
     {
-        if( cmdLineLE->toPlainText().length() ) erc = writeDataToFile(cmdLineLE->toPlainText(), file, &outSize);
+        if( cmdLineLE->toPlainText().length() ) erc = writeDataToFile(file, &outSize);
         if( erc || !cmdLineLE->toPlainText().length() ) erc = writeDataToFile(pItem, file, &outSize);
         if( erc ) msg("Cannot create temp-file in "+path+". Maybe running PMF as Admin might help.");
     }
@@ -5831,7 +5907,8 @@ GString TabEdit::createDataToPaste(QTableWidgetItem *pItem, GString separator)
     for( int i = 1; i <= (int) m_pMainDSQL->numberOfColumns(); ++ i)
     {
         //Do not copy LOBs and XMLs
-        if( (m_pMainDSQL->isLOBCol(i)  || m_pMainDSQL->isXMLCol(i)) && mainWdgt->item(row, i+1)->text() != "NULL" )
+        // mainWdgt->item(row, i+1)->text() == "@DSQL@CLOB"
+        if( (m_pMainDSQL->isLOBCol(i) || m_pMainDSQL->isXMLCol(i)) && mainWdgt->item(row, i+1)->text() != "NULL" )
         {
             err = writeLobToTemp(mainWdgt->item(row, i+1), &val, &unqColSeq);
             if( !err.length() ) val = _PMF_IS_LOB+val;
@@ -6121,7 +6198,7 @@ void TabEdit::setTableNameFromStmt(GString in)
     //A JOIN statmenent: "SELECT * FROM tab1, tab2, ... WHERE...
     if(in.occurrencesOf(",")) return;
 
-    if( currentTable().strip().upperCase() == tabName.upperCase() ) return;
+    if( currentTable().strip().upperCase() == GString(tabName).upperCase() ) return;
     setCurrentTable(tabName);
     return;
 
@@ -6257,7 +6334,7 @@ int TabEdit::tableHasUniqueCols(GString tableName)
     return res;
 }
 
-int TabEdit::colorScheme()
+PmfColorScheme TabEdit::colorScheme()
 {
     return m_iUseColorScheme;
 }
@@ -6302,6 +6379,7 @@ void TabEdit::importData()
     GString ret = foo->setFilesToImport(pPmfDropZone->fileList());
     if( ret != "OK" )
     {
+        delete pDSQL;
         if( ret.length()) msg(ret);
         pPmfDropZone->clearFileList();
         return;
@@ -6312,6 +6390,7 @@ void TabEdit::importData()
     foo->setWindowModality(Qt::WindowModal);
     foo->show();
     delete pDSQL;
+    delete foo;
     pPmfDropZone->clearFileList();
 }
 
@@ -6326,6 +6405,7 @@ void TabEdit::loadSqlEditor()
     m_pExtSQL->show();
     m_gstrExtSqlCmd = m_pExtSQL->orgCmd();
 
+
 }
 
 void TabEdit::loadSqlEditor(QDropEvent *event)
@@ -6337,6 +6417,7 @@ void TabEdit::loadSqlEditor(QDropEvent *event)
     m_pExtSQL->callFileDropEvent(event);
     m_pExtSQL->show();
     m_gstrExtSqlCmd = m_pExtSQL->orgCmd();
+
 }
 
 void TabEdit::showDbConnInfo()
@@ -6358,6 +6439,15 @@ void TabEdit::setEncoding(GString encoding)
     m_pMainDSQL->setEncoding(encoding);
 }
 
+GString TabEdit::reconnect(CON_SET *pCS)
+{
+    deb(__FUNCTION__, "reconnecting");
+    return m_pMainDSQL->reconnect(pCS);
+    m_pMainDSQL->disconnect();
+    return m_pMainDSQL->connect(pCS);
+}
+
+
 void TabEdit::itemDoubleClicked(int row, int column)
 {
 }
@@ -6372,6 +6462,87 @@ int TabEdit::isNewRow(QTableWidgetItem *pItem)
 GDebug* TabEdit::getGDeb()
 {
     return m_pGDeb;
+}
+
+void TabEdit::reconnectNowClicked()
+{
+    m_pPMF->reconnectNowClicked();
+}
+
+void TabEdit::setReconnInfo(GString txt)
+{
+    reconnectInfoLE->setText(txt);
+}
+
+
+
+void TabEdit::createInfoArea()
+{
+    reconnectInfoBox = new QGroupBox();
+    QGridLayout *reconnectInfoLayout = new QGridLayout(this);
+    QSpacerItem * spacer = new QSpacerItem(10, 10);
+
+    reconnectInfoBox->setLayout(reconnectInfoLayout);
+    reconnectInfoLE = new QLineEdit(this);
+    reconnectInfoLE->setReadOnly(true   );
+    reconnectInfoLE->setMinimumWidth(200);
+    printf("createInfoArea, check dark\n");
+    if( Helper::isSystemDarkPalette() ) printf("pmf::createInfoArea: is Dark\n");
+    else printf("pmf::createInfoArea: is Light\n");
+    if( Helper::isSystemDarkPalette()) reconnectInfoLE->setStyleSheet("background:#55AA7F;");
+    else reconnectInfoLE->setStyleSheet("background:#F6FA82;");
+
+    QPushButton * reconnectNowBt = new QPushButton("Reconnect now");
+    //reconnectNowBt ->setMaximumWidth(200);
+    connect(reconnectNowBt, SIGNAL(clicked()), SLOT(reconnectNowClicked()));
+    reconnectInfoLayout->addWidget(reconnectInfoLE, 0, 0);
+    reconnectInfoLayout->addWidget(reconnectNowBt, 0, 1);
+    //reconnectInfoLayout->addItem(spacer, 0, 2);
+    reconnectInfoLayout->setColumnStretch(2, 3);
+
+    //reconnectNowBt->setEnabled(false);
+    reconnectInfoBox->setLayout(reconnectInfoLayout);
+    reconnectInfoBox->hide();
+}
+
+void TabEdit::changePalette()
+{
+	if( Helper::isSystemDarkPalette()) deb("IsSystemDark");
+	else deb("IsSystemDark is FALSE");
+    if( !Helper::isSystemDarkPalette()) return;
+
+    _BgYellow = "background-color:darkCyan;";
+    _BgWhite = "background-color:black;";
+    _BgRed = "background-color: red;";
+    _FgBlue = "color: cyan;";
+    _BgBlue = "background: rgb(179, 217, 255)";
+    _FgRed = "color: red;";
+    _NewVersColor = "background: rgb(210,237,184);";
+	
+    _ColorEven = QColor(20,20,20);
+    _ColorOdd = QColor(60,60,60);
+    _ColorIns = _ColorInsDark;
+    _ColorUpd = _ColorUpdDark;
+    _ColorApos = _ColorAposDark;
+    _ColorBlanksInside = _ColorBlanksDark; //QColor(128, 32, 0);
+
+    _ColorCRLF = _ColorCRLFDark; //QColor(235,87,121);
+
+    /*
+    _ColorIns = QColor(216, 255, 184);
+    _ColorUpd = QColor(184, 251, 218);
+    _ColorInsDark = QColor(81, 104, 123);
+    _ColorUpdDark = QColor(97, 125, 99);
+
+    _ColorApos = QColor(255, 204, 157);
+    _ColorAposDark = QColor(102, 26, 0);
+    _ColorBlanks = QColor(185, 237, 178);
+    _ColorBlanksDark = QColor(128, 32, 0);
+    _ColorBlanksInside = QColor(230, 255, 255);
+
+    _ColorCRLF = QColor(250,177,42);
+    _ColorCRLFDark = QColor(235,87,121);
+    */
 }
 
 

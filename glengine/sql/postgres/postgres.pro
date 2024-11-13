@@ -5,6 +5,11 @@ TARGET= postgres
 OBJECTS_DIR=./obj
 DESTDIR=../../../plugins
 
+IS_MSVC_STATIC = $$(MSVC_STATIC)
+!isEmpty(IS_MSVC_STATIC){
+	DEFINES += MSVC_STATIC_BUILD
+}
+
 
 ################################
 ######## Use QT for some tasks.
@@ -91,6 +96,11 @@ win32-msvc{
 		INCLUDEPATH += $$(POSTGRES_INC_32)
         LIBS += $$(POSTGRES_LIB_32)/libpq.lib
 	}
+	!isEmpty(IS_MSVC_STATIC){
+		CONFIG+=STATIC
+		DEFINES += STATIC	
+	}
+	
     LIBS += user32.lib
     
     LIBS += WS2_32.lib

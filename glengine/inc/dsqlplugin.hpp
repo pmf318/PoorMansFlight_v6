@@ -46,6 +46,12 @@ extern GString m_strDSQLPluginPath;
 #define PluginMissing 1
 #define PluginNotLoadable 2
 
+typedef struct _PLGIN{
+    GString Type;
+    GString PluginName;
+} PLUGIN_DATA;
+
+
 #ifdef MakePlugin
   class DSQLPluginExp_Imp DSQLPlugin
 #else
@@ -81,6 +87,7 @@ private:
     int callLoader(GString dbName, GString file = "");
     void deb(GString msg);
     int setPathEnvironment();
+    static PLUGIN_DATA *createPlgData(GString type, GString plgName);
     GString m_strDBTypeName;
     int m_iPluginLoaded;
     int m_iMyInstanceCounter;
@@ -90,7 +97,7 @@ private:
 
 
 
-public:    
+public:
    VCExport   DSQLPlugin(GString dbTypeName, GString file = "");
    VCExport   DSQLPlugin(const DSQLPlugin& plg);
    VCExport   DSQLPlugin& operator= (DSQLPlugin const& in);
@@ -107,9 +114,7 @@ public:
    VCExport   int loadError();
 
    //List of Databasetypes: DB2, SQlServer,...
-   VCExport static void DBTypeNames(GSeq <GString>* list);
-
-
+   VCExport static void PluginNames(GSeq <PLUGIN_DATA*>* list);
    /************************************************
     * Interface implementation
     ***********************************************/
@@ -121,7 +126,7 @@ public:
    VCExport GString connect(GString db, GString uid, GString pwd, GString host = "", GString port = "") ;
    VCExport GString connect(CON_SET * pCs);
    VCExport int disconnect();
-   VCExport GString initAll(GString message, unsigned long maxRows = 0, int getLen = 0);
+   VCExport GString initAll(GString message, long maxRows = -1, int getLen = 0);
    VCExport int commit();
    VCExport int rollback();
    VCExport unsigned int numberOfColumns();
@@ -239,6 +244,7 @@ public:
     VCExport GString allPurposeFunction(GKeyVal * pKeyVal);
     VCExport GString setEncoding(GString encoding);
     VCExport void getAvailableEncodings(GSeq<GString> *encSeq);
+    VCExport GString reconnect(CON_SET *pCS);
 
 };
 #endif

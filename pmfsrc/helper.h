@@ -13,6 +13,7 @@
 #define pmf_min(A,B) ((A) <(B) ? (A):(B))
 #endif
 
+
 class Helper
 {
 private:
@@ -56,6 +57,11 @@ public:
     static GString connSetToString(CON_SET * pCS);
     static int connSetFromString(GString txt, CON_SET * pCS);
     static GString handleGuid(DSQLPlugin *pDSQL,  GString in, int convertGuid);
+    static int runStuffInProcess(GString cmd, GString &res, GString &err);
+	static int runCommandInProcess(GString cmd, GString &res, GString &err);
+	static bool isSystemDarkPalette();
+    static GString getSensibleStyle();
+    //static int convertFileToCodePage(GString inFile, GString outFile, GString codec);
 
 };
 

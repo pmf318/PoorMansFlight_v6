@@ -40,7 +40,7 @@ ThreadBox::ThreadBox(QWidget *parent, const char* name, const char* procName, co
 
 
     m_timer = new QTimer( this );
-    connect( m_timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
+    connect( m_timer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
     m_timer->start( 1000 );
 
     GString msg = "Process: "+GString(procName);
@@ -78,7 +78,7 @@ ThreadBox::ThreadBox(QWidget *parent, const char* name, const char* procName, co
 
 }
 
-void ThreadBox::timerEvent()
+void ThreadBox::versionCheckTimerEvent()
 {
     QTime t = time->addSecs( ++seconds );
     GString txt = "Time expired: "+GString(t.toString());

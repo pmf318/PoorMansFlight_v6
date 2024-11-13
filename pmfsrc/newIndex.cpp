@@ -99,7 +99,7 @@ NewIndex::NewIndex(DSQLPlugin* pDSQL, QWidget *parent)
     aThread = NULL;
     tb = NULL;
     timer = new QTimer( this );
-    connect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
+    connect( timer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
     QObject::connect(selLB, SIGNAL(itemDoubleClicked(QListWidgetItem*)), this, SLOT(selDoubleClicked(QListWidgetItem*)));
 }
 
@@ -212,7 +212,7 @@ void NewIndex::selDoubleClicked(QListWidgetItem *pItem)
     delete ict;
 }
 
-void NewIndex::timerEvent()
+void NewIndex::versionCheckTimerEvent()
 {
     if( !aThread ) return;
     if( !aThread->isAlive() )

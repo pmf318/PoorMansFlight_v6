@@ -93,6 +93,7 @@ public:
    VCExport   GString initLineCrs();
    VCExport   int nextLineCrs();
    VCExport   GString lineAtCrs();
+   VCExport   int addLineForOS(GString line);
 
 };
 #endif

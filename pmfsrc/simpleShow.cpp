@@ -5,7 +5,6 @@
 
 #include "simpleShow.h"
 #include "gstuff.hpp"
-#include "pmfdefines.h"
 #include <qlayout.h>
 #include <qfont.h>
 //Added by qt3to4:
@@ -106,7 +105,7 @@ void SimpleShow::setText(GString text)
     displayData();
 }
 
-void SimpleShow::setSqlHighlighter(int colorScheme, GSeq <GString>* list)
+void SimpleShow::setSqlHighlighter(PmfColorScheme colorScheme, GSeq <GString>* list)
 {
     SqlHighlighter * sqlHighlighter = new SqlHighlighter(colorScheme, infoTE->document(), list);
     infoTE->setSqlHighlighter(sqlHighlighter);

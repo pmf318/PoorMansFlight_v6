@@ -79,7 +79,7 @@ private slots:
     void newIndClicked();
     void addClicked();
     void remClicked();
-    void timerEvent();
+    void versionCheckTimerEvent();
     void OKClicked();
     void selDoubleClicked(QListWidgetItem* pItem);
 

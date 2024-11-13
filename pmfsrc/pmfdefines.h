@@ -32,6 +32,7 @@ static GString _NO_DB           = "<None>";
 static GString _BM_FILE         = "bookmarks";
 static GString _HST_FILE        = "sqlhist";
 static GString _CONNSET_FILE    = "connset";
+static GString _CONNSET_XML     = "connset.xml";
 static GString _INIT_FILE       = "init";
 static GString _CFG_DIR         = "pmf6";
 static GString _RESTORE_FILE    = "restore_";
@@ -49,13 +50,16 @@ static GString _DARK_THEME    = " (dark)";
 static GString _EXPIMPSET_DIR   = "expImpSettings";
 static GString _XMLDDLSET_DIR   = "xmlDdlSettings";
 static GString _OPTIONSTABSET_DIR   = "optionsTabSettings";
-static GString _CRLF_MARK     = "@@CRLF@@";
+static GString _CRLF_MARK       = "@@CRLF@@";
+static GString _LASTCONNDATA    = "lastconndata";
+
 
 
 static GString _ENTERTOSAVE = "enterToSave";
 static GString _TEXTCOMPLETER = "textCompleter";
 static GString _COUNTROWS = "countRows";
 static GString _CONVERTGUID = "convertGuid";
+static GString _AUTOLOADTABLE = "autoLoadTable";
 static GString _READUNCOMMITTED = "readUncommitted";
 static GString _HIDESYSTABS = "hideSysTabs";
 static GString _REFRESHONFOCUS = "refreshOnFocus";
@@ -63,16 +67,23 @@ static GString _USEESCTOCLOSE = "useEscToClose";
 static GString _CHECKSENABLED = "checksEnabled";
 static GString _LAST_SQL_TABLE  = " [TABLE: ";
 
+
 static GString _LOCAL_CFG_FLAG  = "local.cfg";
 
 #define MaxUserActions 100
+
+enum PmfColorScheme{
+    None,
+    Standard,
+    NewDark
+};
 
 static GString newVersionFileLocation()
 {
     return QDir::homePath()+"//pmf6setup.exe";
 }
 
-static GString basePath(GString subDir, int useLocalCfg = 0)
+static GString basePath(GString subDir = "", int useLocalCfg = 0)
 {
     GString pathSep;
 #ifdef MAKE_VC
@@ -116,6 +127,11 @@ static GString optionsTabSettingsDir(){
 static GString autoCatalogFilePath(){
     return basePath("", 1);
 }
+
+static GString lastConnDataSettings(){
+    return basePath()+_LASTCONNDATA;
+}
+
 
 
 #endif

@@ -303,16 +303,29 @@ int DSQLPlugin::isOK()
     return m_iPluginLoaded;
 }
 
-void DSQLPlugin::DBTypeNames(GSeq <GString>* list)
+PLUGIN_DATA *DSQLPlugin::createPlgData(GString type, GString plgName)
 {
-    list->add(_DB2);
-    list->add(_SQLSRV);
-    list->add(_DB2ODBC);
-    list->add(_MARIADB);
-    list->add(_POSTGRES);
-    list->add(_PGSQLCLI);
-//    list->add(_ORAODBC);
+    PLUGIN_DATA *plg = new PLUGIN_DATA;
+    plg->Type = type;
+    plg->PluginName = plgName;
+    return plg;
+}
 
+void DSQLPlugin::PluginNames(GSeq <PLUGIN_DATA*>* list)
+{
+#ifdef MAKE_VC
+    list->add( createPlgData(_DB2, "db2dsql.dll") );
+    list->add( createPlgData(_DB2ODBC, "db2dcli.dll") );
+    list->add( createPlgData(_SQLSRV, "odbcdsql.dll") );
+    list->add( createPlgData(_MARIADB, "mariadb.dll") );
+    list->add( createPlgData(_POSTGRES, "postgres.dll") );
+#else
+    list->add( createPlgData(_DB2, "libdb2dsql.so") );
+    list->add( createPlgData(_DB2ODBC, "libdb2dcli.so") );
+    list->add( createPlgData(_SQLSRV, "libodbcdsql.so") );
+    list->add( createPlgData(_MARIADB, "libmariadb.so") );
+    list->add( createPlgData(_POSTGRES, "libpostgres.so") );
+#endif
 }
 void DSQLPlugin::init()
 {
@@ -342,7 +355,7 @@ int DSQLPlugin::disconnect()
 {
     return m_pIDSQL->disconnect();
 }
-GString DSQLPlugin::initAll(GString message, unsigned long maxRows, int getLen)
+GString DSQLPlugin::initAll(GString message, long maxRows, int getLen)
 {
     return m_pIDSQL->initAll(message, maxRows, getLen);
 }
@@ -769,4 +782,9 @@ GString DSQLPlugin::setEncoding(GString encoding)
 void DSQLPlugin::getAvailableEncodings(GSeq<GString> *encSeq)
 {
     return m_pIDSQL->getAvailableEncodings(encSeq);
+}
+
+GString DSQLPlugin::reconnect(CON_SET *pCS)
+{
+    return m_pIDSQL->reconnect(pCS);
 }

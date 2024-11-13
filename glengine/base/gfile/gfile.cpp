@@ -321,11 +321,27 @@ GString GFile::getLine(int index)
     if( index < 0 || (unsigned long)index > m_seqLines.numberOfElements() ) return "";
     return m_seqLines.elementAtPosition(index).stripTrailing("\n");
 }
+
+int GFile::addLineForOS(GString line)
+{
+    FILE * f;
+    if( !(f = fopen(fileName, "a+b")) ) return 1;
+    fputs(line, f);
+#ifdef MAKE_VC
+    fputc(13, f);
+    fputc(10, f);
+#else
+    fputc(10, f);
+#endif
+    fclose(f);
+    return 0;
+}
+
 int GFile::addLine(GString line)
 {
     FILE * f;
-    if( !(f = fopen(fileName, "a+")) ) return 1;
-	fputs(line+"\n", f);
+    if( !(f = fopen(fileName, "a+b")) ) return 1;
+    fputs(line+"\n", f);
     fclose(f);
 	return 0;
 }
@@ -374,6 +390,7 @@ int GFile::lines()
 {
     return m_seqLines.numberOfElements();
 }
+
 void GFile::tm(GString message)
 {
     GDebug::debMsg("GFile", 1, message);

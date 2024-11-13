@@ -28,6 +28,7 @@
 #include <QTextCharFormat>
 #include <QColor>
 
+#include <pmfdefines.h>
 
 
 
@@ -37,9 +38,9 @@ class XmlEdit : public QTextEdit
 	class XmlHighlighter : public QSyntaxHighlighter
 	{
 		public:
-            XmlHighlighter(QObject* parent, int useColorScheme );
-            XmlHighlighter(QTextDocument* parent, int useColorScheme );
-            XmlHighlighter(QTextEdit* parent, int useColorScheme );
+            XmlHighlighter(QObject* parent, PmfColorScheme useColorScheme );
+            XmlHighlighter(QTextDocument* parent, PmfColorScheme useColorScheme );
+            XmlHighlighter(QTextEdit* parent, PmfColorScheme useColorScheme );
 			~XmlHighlighter();
 		
 			enum HighlightType
@@ -63,8 +64,10 @@ class XmlEdit : public QTextEdit
 
 
 		private:
-            void init(int useColorScheme );
+            void init(PmfColorScheme useColorScheme );
 			void msg(GString txt);
+			void setDarkColors();
+
 		
 			QTextCharFormat fmtSyntaxChar;
 			QTextCharFormat fmtElementName;
@@ -93,7 +96,7 @@ class XmlEdit : public QTextEdit
 			QWidget *m_parent;
 	}; 	
 public:
-    XmlEdit(QWidget *parent, int colorScheme);
+    XmlEdit(QWidget *parent, PmfColorScheme colorScheme);
     ~XmlEdit();
 	XmlHighlighter * pXmlHighlighter;
 	bool Conform();
@@ -118,7 +121,7 @@ private:
 
 		
 	QWidget *m_parent;
-    int m_iColorScheme;
+    PmfColorScheme m_iColorScheme;
 	void msg(GString txt);
 	/*
 	

@@ -256,7 +256,7 @@ public:
 
 
 
-    VCExport      GString initAll(GString message, unsigned long maxLines = 0, int getLen = 0);
+    VCExport      GString initAll(GString message, long maxLines = -1, int getLen = 0);
     VCExport      void emptyLVSeq();
     VCExport      GString sqlError();
     VCExport      int sqlCode();
@@ -385,12 +385,13 @@ public:
     VCExport GString allPurposeFunction(GKeyVal * pKeyVal){ return "";}
     VCExport GString setEncoding(GString encoding);
     VCExport void getAvailableEncodings(GSeq<GString> *encSeq);
+    VCExport GString reconnect(CON_SET *pCS);
     ///
     /////////////////////////// TESTBED ////////////////////////////
     ///
 private:
 
-    GString initAll_CLI(GString message, unsigned long maxRows, int getLen);
+    GString initAll_CLI(GString message, long maxRows, int getLen);
     int prepareSTMT(unsigned char* sqlstr);
 
 };

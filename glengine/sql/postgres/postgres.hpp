@@ -52,10 +52,15 @@
 #include <libpq-fe.h>
 #include "pmf_pgsql_def.hpp"
 
-#define PSTGRS_BYTEA	BYTEA_PMF
-#define PSTGRS_LOB  	117
-#define PSTGRS_XML      XML_PMF
-#define PSTGRS_UUID     UUID_PMF
+#define PSTGRS_BYTEA        BYTEA_PMF
+#define PSTGRS_LOB          117
+#define PSTGRS_XML          XML_PMF
+#define PSTGRS_UUID         UUID_PMF
+
+//For selects like "select 'X' from ..."
+#define PSTGRS_ANON_TYPE    1313
+#define PSTGRS_ANON_COL     "?column?"
+
 
 // ******************************* CLASS **************************** //
 
@@ -88,12 +93,10 @@ private:
     int m_iMyInstance;
 
     ODBCDB m_odbcDB;
-    GString m_strDB, m_strUID, m_strPWD, m_strNode, m_strHost, m_strPort, m_strEncoding;
+    GString m_strDB, m_strUID, m_strPWD, m_strHost, m_strPort, m_strEncoding, m_strOptions, m_strPwdCmd;
     signed int m_iNumberOfColumns;
     unsigned long m_iNumberOfRows;
 
-    unsigned long m_ulMaxRows;
-    unsigned long m_ulFetchedRows;
     GString m_strCurrentDatabase;
     int m_iTruncationLimit;
     int m_iReadUncommitted;
@@ -134,14 +137,15 @@ private:
     void createIndexRow(QTableWidget *pWdgt, int row,
                         GString id, GString name, GString cols, GString unq, GString crt, GString mod, GString dis);
     int getIdentityColParams(GString table, int *seed, int * incr);
-    GString exportCsvBytea(GString message, GString targetFile, GString delim, int writeHeader, int byteaAsFile, int xmlAsFile, int exportLobs);
+    GString exportCsvBytea(GKeyVal *pKeyVal);
     GString getColumnsFromCreateStmt(GString stmt);
     void addToIdxSeq(GSeq <IDX_INFO*> *indexSeq, IDX_INFO *pIdx);
     //GString importCsvBytea(GString table, GString srcFile, GString logFile, GString delim, int hasHeader, int commitCount, int byteaAsFile);
-    GString initAllInternal(GString message, unsigned long maxRows = 0, int getLen = 0, int maskLargeVals = 1);
+    GString initAllInternal(GString message, long maxRows = -1, int getLen = 0, int readClobs = 0);
     GString getConstraint(GString sqlCmd);
     int tryFastCursor(GString sqlCmd);
     void convertToBin(GString inFile, GString outFile);
+    GString sqlErrInternal();
 
     //void setSimpleColType(enum_field_types type);
 
@@ -155,6 +159,10 @@ private:
     GString exportBlob(unsigned int oid, GString target);
     //int loadFileIntoBuf(GString fileName, unsigned char** fileBuf, unsigned long *size)
     GString fillHostVarSeq(GString message);
+    GString createConnectionString(CON_SET * pCs);
+
+    GString connectInternal(CON_SET * pCs);
+    void clearPgRes();
 
     int m_iReadClobData;
 
@@ -178,12 +186,13 @@ public:                              // Public section
         return POSTGRES;
     }
     VCExport int getConnData(GString * db, GString *uid, GString *pwd) const;
-    VCExport GString getDBTypeName(){ return _POSTGRES; }
+    VCExport GString getDBTypeName();
     VCExport void setDBType(ODBCDB dbType){ m_odbcDB = dbType;}
     VCExport GString connect(GString db, GString uid, GString pwd, GString host = "localhost", GString port = "5432");
     VCExport GString connect(CON_SET * pCs);
     VCExport int disconnect();
-    VCExport GString initAll(GString message, unsigned long maxRows = 0, int getLen = 0);
+    VCExport GString initAll(GString message, long maxRows = -1, int getLen = 0);
+    GString initAllCrs(GString message, long maxRows,  int getLen);
     VCExport int commit();
     VCExport int rollback();
     VCExport unsigned int  numberOfColumns();
@@ -275,6 +284,7 @@ public:                              // Public section
     VCExport  int getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq);
     VCExport  int getTriggers(GString table, GString *text);
     VCExport GSeq <IDX_INFO*> getIndexeInfo(GString table);
+    void getIndexInfoExtended(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tableName);
     void getIndexInfo(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tableName = "");
     VCExport GSeq <GString> getTriggerSeq(GString table);
 
@@ -311,6 +321,7 @@ public:                              // Public section
     VCExport GString allPurposeFunction(GKeyVal * pKeyVal);
     VCExport GString setEncoding(GString encoding);
     VCExport void getAvailableEncodings(GSeq<GString> *encSeq);
+    VCExport GString reconnect(CON_SET *pCS);
 };
 
 #endif

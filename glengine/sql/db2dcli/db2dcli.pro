@@ -26,6 +26,10 @@ unix{
     CONFIG+=debug
     CONFIG-=release
 }
+IS_MSVC_STATIC = $$(MSVC_STATIC)
+!isEmpty(IS_MSVC_STATIC){
+	DEFINES += MSVC_STATIC_BUILD
+}
 
 
 ## Qt5 doc mentions this, but at least for now it's apparently not needed.
@@ -127,7 +131,12 @@ win32-msvc{
 			LIBS += $$(DB2PATH)/lib/win32/db2cli.lib
 			LIBS += WS2_32.lib user32.lib
 			LIBS += ../../lib/glengineQT.lib
-	}
+		}
+		!isEmpty(IS_MSVC_STATIC){
+			CONFIG+=STATIC
+			DEFINES += STATIC	
+		}
+		
 }
 
 

@@ -50,7 +50,7 @@ class ExportBox : public QDialog
 		void OKClicked();
 		void CancelClicked();
 		int getFileClicked();
-		void timerEvent();
+		void versionCheckTimerEvent();
         void optionsClicked();
         void modeClicked();
 		
@@ -75,10 +75,15 @@ class ExportBox : public QDialog
         GString m_gstrExpErr;
         ExpImpOptions * m_pExpImpOptions;
         QGridLayout * m_pMainGrid;
+        /*
         int m_iFullSelectLobCount;
         int m_iFullSelectLobFiles;
         int m_iCurrentSelectLobCount;
         int m_iCurrentSelectLobFiles;
+        */
+
+        int m_iLobFilesCount;
+        int m_iLobCount;
 		
 };
 

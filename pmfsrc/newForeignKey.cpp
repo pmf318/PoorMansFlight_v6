@@ -130,7 +130,7 @@ NewForeignKey::NewForeignKey(DSQLPlugin* pDSQL, QWidget *parent, GString fullTab
     aThread = NULL;
     tb = NULL;
     timer = new QTimer( this );
-    connect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
+    connect( timer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
     connect( m_pTabSel, SIGNAL(tableSelection(QString )), this, SLOT(tableSelected(QString )));
     connect( m_pTabSel, SIGNAL(schemaSelection(QString )), this, SLOT(tableSelected(QString )));
 }
@@ -227,7 +227,7 @@ void NewForeignKey::newForeignKeyClicked()
 
 }
 
-void NewForeignKey::timerEvent()
+void NewForeignKey::versionCheckTimerEvent()
 {
     if( !aThread ) return;
     if( !aThread->isAlive() )

@@ -24,6 +24,7 @@
 #include  <QKeyEvent>
 #include <QProcess>
 #include <QToolButton>
+#include <QDesktopServices>
 
 
 #include <sys/stat.h>
@@ -56,6 +57,7 @@
 #include "catalogDB.h"
 #include "pmfTable.h"
 #include "selectEncoding.h"
+#include "newConn.h"
 
 
 #include "QResource"
@@ -83,6 +85,8 @@ extern "C" int _except_handler4_common() {
 
 Pmf::Pmf(GDebug *pGDeb, int threaded)
 {	
+	//QStyleHints styleHints = this->styleHints();
+	
     aThread = NULL;
     m_pGDeb = pGDeb;
     m_iThreaded = threaded;
@@ -92,7 +96,10 @@ Pmf::Pmf(GDebug *pGDeb, int threaded)
 	m_iTabIDCounter = 0;
 	m_iShowing = 0;
     m_pDownloader = 0;
-    m_iColorScheme = 0;
+    m_iReconnectWaitTime = 0;
+    m_gstrPwdCmd = "";
+    timerCount = 0;
+    m_iColorScheme = PmfColorScheme::None;
 
 	createGUI();
     m_tabWdgt = new QTabWidget;
@@ -116,8 +123,8 @@ Pmf::Pmf(GDebug *pGDeb, int threaded)
 	    
 
     QVBoxLayout *mainVBox = new QVBoxLayout;
-    createDownloadInfo();
-    mainVBox->addWidget(downloadInfoBox);
+    createInfoArea();
+    mainVBox->addWidget(reconnectInfoBox);
     mainVBox->addWidget(m_tabWdgt);
     QWidget *widget = new QWidget();
     widget->setLayout(mainVBox);
@@ -140,6 +147,8 @@ Pmf::Pmf(GDebug *pGDeb, int threaded)
     addTabButton->setIcon(icoB);
     connect(addTabButton, SIGNAL(clicked()), SLOT(addNewTab()));
     addTabButton->setToolTip(tr("Add new tab"));    
+    reconnectTimer = new QTimer( this );
+    connect( reconnectTimer, SIGNAL(timeout()), this, SLOT(reconnectTimerEvent()) );
 //    this->setMinimumSize(1024, 768);
 //    this->showFullScreen();
     //connect(m_tabWdgt, SIGNAL(tabOrderWasChanged()), SLOT(pmfTabOrderWasChanged()));
@@ -170,8 +179,34 @@ Pmf::~Pmf()
     deb("closing ::pmf done.");
 }
 
-void Pmf::createDownloadInfo()
+void Pmf::createInfoArea()
 {
+    reconnectInfoBox = new QGroupBox();
+    QGridLayout *reconnectInfoLayout = new QGridLayout(this);
+    QSpacerItem * spacer = new QSpacerItem(10, 10);
+
+    reconnectInfoBox->setLayout(reconnectInfoLayout);
+    reconnectInfoLE = new QLineEdit(this);
+    reconnectInfoLE->setReadOnly(true   );
+    reconnectInfoLE->setMinimumWidth(500);
+    printf("createInfoArea, check dark\n");
+    if( Helper::isSystemDarkPalette() ) printf("pmf::createInfoArea: is Dark\n");
+    else printf("pmf::createInfoArea: is Light\n");
+    if( Helper::isSystemDarkPalette()) reconnectInfoLE->setStyleSheet("background:#55AA7F;");
+    else reconnectInfoLE->setStyleSheet("background:#F6FA82;");
+
+    reconnectNowBt = new QPushButton("Reconnect now");
+    //reconnectNowBt ->setMaximumWidth(200);
+    connect(reconnectNowBt, SIGNAL(clicked()), SLOT(reconnectNowClicked()));
+    reconnectInfoLayout->addWidget(reconnectInfoLE, 0, 0);
+    reconnectInfoLayout->addWidget(reconnectNowBt, 0, 1);
+    reconnectInfoLayout->addItem(spacer, 0, 2);
+    reconnectInfoLayout->setColumnStretch(2, 3);
+
+    //reconnectNowBt->setEnabled(false);
+    reconnectInfoBox->setLayout(reconnectInfoLayout);
+    reconnectInfoBox->hide();
+/*
     downloadInfoBox = new QGroupBox();
     QGridLayout *downloadInfoLayout = new QGridLayout(this);
     QSpacerItem * spacer = new QSpacerItem(10, 10);
@@ -194,20 +229,97 @@ void Pmf::createDownloadInfo()
 
     downloadCancelButton->setEnabled(false);
     downloadInfoBox->setLayout(downloadInfoLayout);
-    downloadInfoBox->hide();
+//    downloadInfoBox->hide();
+*/
 }
 
-void Pmf::timerEvent()
+void Pmf::reconnectNowClicked()
+{
+    reconnectInfoLE->setText("Reconnecting....");
+    reconnectTimer->stop();
+    timerCount = 60*m_iReconnectWaitTime;
+    reconnectTimerEvent();
+    reconnectTimer->start();
+    reconnectInfoLE->setText("Reconnecting....Done.");
+}
+
+
+
+
+void Pmf::reconnectTimerEvent()
+{
+    timerCount++;
+    deb("timerCount: "+GString(timerCount)+", m_iReconnectWaitTime: "+GString(m_iReconnectWaitTime));
+    printf("timer: %i, timeout: %i\n", timerCount, m_iReconnectWaitTime);
+    int countDown = 60*m_iReconnectWaitTime - timerCount;
+    GString info = "Reconnecting in "+GString(countDown)+" seconds...";
+
+    for( int i = 0; i < m_tabWdgt->count(); ++i )
+    {
+        QWidget* pWdgt = m_tabWdgt->widget(i);
+        TabEdit * pTE = (TabEdit*) pWdgt;
+        pTE->setReconnInfo(info);
+    }
+    //reconnectInfoLE->setText(info);
+    if( timerCount >= 60*m_iReconnectWaitTime)
+    {
+        deb("Init reconnect...");
+        timerCount = 0;
+        printf("Reconnecting...");
+        CON_SET conSet;
+        GString pwd;
+        GString err = getPwdFromCmd(m_gstrPwdCmd, &pwd);
+        deb("err from getPwd: "+err);
+        if( err.length() )
+        {
+            reconnectTimer->stop();
+            return;
+        }
+        m_pIDSQL->currentConnectionValues(&conSet);
+        conSet.PWD = pwd;
+        for( int i = 0; i < m_tabWdgt->count(); ++i )
+        {
+            QWidget* pWdgt = m_tabWdgt->widget(i);
+            TabEdit * pTE = (TabEdit*) pWdgt;
+            deb("reconnecting tab #"+GString(i));
+            err = pTE->reconnect(&conSet);
+            if( err.length() )
+            {
+                reconnectTimer->stop();
+                msg(err+"\n\nNote: You have set '"+m_gstrPwdCmd+"' for this connection.\nPlease check this script for errors.");
+                return;
+            }
+            //pTE->okClick();
+        }
+    }
+}
+
+GString Pmf::getPwdFromCmd(GString cmd, GString *pwd)
+{
+    if( cmd.strip().length() == 0 )return "";
+    GString res, err;
+    Helper::runCommandInProcess(cmd, res, err);
+
+    *pwd = res.stripTrailing('\r').stripTrailing('\n').stripTrailing('\r');
+    if( err.length() )
+    {
+        msg("Password cmd "+cmd+" gave error: \n"+err+"\nCannot reconnect.");
+        return "";
+    }
+    return err;
+}
+
+void Pmf::versionCheckTimerEvent()
 {
     if( !aThread ) return;
 
     if( !aThread->isAlive())
     {
-        timer->stop();
+        versionCheckTimer->stop();
     }
     if( m_gstrCurrentVersion.length() )
     {
-        timer->stop();
+        versionCheckTimer->stop();
         QSettings settings(_CFG_DIR, "pmf6");
         GString ver = m_gstrCurrentVersion.removeAll('.');
         settings.setValue("LastCheckedVer", QString((char*)ver));
@@ -218,7 +330,7 @@ void Pmf::timerEvent()
     /***************** DEAD CODE AHEAD *******************************/
     if( m_gstrCurrentVersion.length() )
     {
-        timer->stop();
+        versionCheckTimer->stop();
         if( m_gstrCurrentVersion == "?" )
         {
             QSettings dateSettings(_CFG_DIR, "pmf6");
@@ -259,65 +371,203 @@ void Pmf::MyThread::run()
     myPmf->m_gstrCurrentVersion = myPmf->checkForUpdate(1);
 }
 
+void Pmf::setConnectionColor()
+{
+    QColor res = QColorDialog::getColor();
+    if( !res.isValid() ) return;
+    QString col = "background-color: ";
+    m_gstrConnectionColor = res.name();
+    col += (char*) m_gstrConnectionColor;
+    menuBar()->setStyleSheet(col);
+
+    CON_SET curSet;
+    m_pIDSQL->currentConnectionValues(&curSet);
+    ConnSet cs;
+    cs.initConnSet();
+    cs.setConnectionColor(curSet.Type, curSet.DB, curSet.Host, curSet.Port, curSet.UID, m_gstrConnectionColor);
+    cs.save();
+
+    for( int i = 0; i < m_tabWdgt->count(); ++i )
+    {
+        QWidget * pWdgt = m_tabWdgt->widget(i);
+        TabEdit* pTE = (TabEdit*) pWdgt;
+        pTE->fillDBNameLE(m_gstrDBName, m_gstrConnectionColor);
+    }
+
+}
 
 QMenu * Pmf::createStyleMenu()
 {
+	//qputenv("QT_QPA_PLATFORM", "windows:darkmode=0");
+    printf("createStyleMenu start\n");
     QStringList styles;
-    /* Obsolete (not working anymore), replaced by QStyleFactory::keys()
-#ifndef MAKE_VC
-    styles << "plastique" << "motif" << "cde" << "windows" << "cleanlooks" << "Fusion";
-#else    
-    styles << "plastique" << "windowsxp" << "windowsvista";
-#endif
-    */
     styles = QStyleFactory::keys();
     m_stylesMenu = new QMenu("Style", this);
     QAction *pLightAction, *pDarkAction;
     QSettings settings(_CFG_DIR, "pmf6");
-    QString prevStyle;
-#ifndef MAKE_VC
-    prevStyle = settings.value("style", "Fusion").toString();
-#else
-    prevStyle = settings.value("style", "windowsvista").toString();
-#endif
+    GString prevStyle = Helper::getSensibleStyle();
+	printf("Pmf::createStyleMenu(): Got %s as sensible style\n", (char*) prevStyle);
+    //settings.setValue("style", QString((char*)prevStyle));
     GString styleName;
     for (int i = 0; i < styles.size(); ++i)
-    {	
+    {
         styleName = (styles.at(i).toLocal8Bit()).data();
-        pLightAction = new QAction(styleName, this);        
+#ifdef MAKE_VC
+        if( GString(styleName).lowerCase() == "windowsvista" )
+        {
+            continue;
+        }
+#endif
+        pLightAction = new QAction(styleName, this);
         pLightAction->setCheckable(true);
         pLightAction->setChecked(false);
+		printf("Checking if prevStyle %s matches available style %s...\n", (char*) prevStyle, (char*)styleName);
         if( GString(prevStyle) == styleName)
-		{
+        {
             pLightAction->setChecked(true);
-
             QApplication::setStyle(QStyleFactory::create(prevStyle));
+			printf("Checking if prevStyle %s matches available style %s: have match.\n", (char*) prevStyle, (char*)styleName);
             //qApp->setStyleSheet("QTabBar::close-button { image: url(:/pmf6.1/pmfsrc/icons/addTab.png) subcontrol-position: left; }");
             qApp->setStyleSheet("QTabBar::close-button { image: url(:closeTab.png); subcontrol-position: right;} QTabBar::close-button:hover {image: url(:closeTab_hover.png)}");
-		}
+        }
         m_stylesMenu->addAction(pLightAction);
         connect(pLightAction, SIGNAL(triggered()), this, SLOT(setStyle()));
     }
-    /*
+    printf("createStyleMenu pos1\n");
+#if QT_VERSION >= 0x060500
+    //Also add "FUSION - DARK" for Windows if Windows is set to DarkMode
     m_stylesMenu->addSeparator();
     for (int i = 0; i < styles.size(); ++i)
     {
         styleName = (styles.at(i).toLocal8Bit()).data();
+        if( GString(styleName).lowerCase() != "fusion"  && GString(styleName).lowerCase() != "windows" ) continue;
+
         pDarkAction = new QAction(styleName + _DARK_THEME, this);
         pDarkAction->setCheckable(true);
         pDarkAction->setChecked(false);
         if( GString(prevStyle) == styleName + _DARK_THEME )
         {
             pDarkAction->setChecked(true);
-            QApplication::setStyle(QStyleFactory::create(prevStyle));
+            //QApplication::setStyle(QStyleFactory::create(prevStyle));
         }
         m_stylesMenu->addAction(pDarkAction);
         connect(pDarkAction, SIGNAL(triggered()), this, SLOT(setStyle()));
     }
-    */
-
+	
+//    pDarkAction = new QAction("Fusion" + _DARK_THEME, this);
+//    pDarkAction->setCheckable(true);
+//    pDarkAction->setChecked(false);
+//    printf("DarkMode: Checking if prevStyle %s matches available style %s...\n", (char*) prevStyle, (char*)styleName);
+//    if( GString(prevStyle) == "Fusion" + _DARK_THEME )
+//    {
+//		printf("DarMode: Checking if prevStyle %s matches available style %s: Have match\n", (char*) prevStyle, (char*)styleName);
+//        pDarkAction->setChecked(true);
+//		//Dark: Setting This is necessary on Win2019 Server.
+//        //QApplication::setStyle(QStyleFactory::create("Fusion"));
+//    }
+//    m_stylesMenu->addAction(pDarkAction);
+//    connect(pDarkAction, SIGNAL(triggered()), this, SLOT(setStyle()));
+#endif
     return m_stylesMenu;
 }
+
+
+//QMenu * Pmf::createStyleMenu()
+//{
+//    printf("createStyleMenu start\n");
+//    QStringList styles;
+//    styles = QStyleFactory::keys();
+//    m_stylesMenu = new QMenu("Style", this);
+//    QAction *pLightAction, *pDarkAction;
+//    QSettings settings(_CFG_DIR, "pmf6");
+//    QString prevStyle;
+//#ifndef MAKE_VC
+//    prevStyle = settings.value("style", "Fusion").toString();
+//#else
+//    prevStyle = settings.value("style", "Fusion").toString();
+//#endif
+//    GString styleName;
+//    //Reset: Used to be DarkMode, but OS is now set to lightMode.
+//    if( GString(prevStyle).occurrencesOf(_DARK_THEME) && !Helper::isSystemDarkPalette())
+//    {
+//        printf("Prev. was dark, but OS mode changed to light, defaulting to 'Fusion'\n");
+//        prevStyle = "Fusion";
+//        settings.setValue("style", prevStyle);
+//    }
+//    else if( !GString(prevStyle).occurrencesOf(_DARK_THEME) && Helper::isSystemDarkPalette())
+//    {
+//        printf("Prev. was light or none, but OS mode is dark, defaulting to 'Fusion (dark)'\n");
+//        GString tmp = "Fusion" + _DARK_THEME;
+//        prevStyle = (char*)tmp;
+//        settings.setValue("style", prevStyle);
+//    }
+
+//    for (int i = 0; i < styles.size(); ++i)
+//    {
+//        styleName = (styles.at(i).toLocal8Bit()).data();
+//#ifdef MAKE_VC
+//        if( GString(styleName).lowerCase() == "windowsvista" )
+//        {
+//            continue;
+//        }
+//#endif
+//        pLightAction = new QAction(styleName, this);
+//        pLightAction->setCheckable(true);
+//        pLightAction->setChecked(false);
+//        if( GString(prevStyle) == styleName)
+//		{
+//            pLightAction->setChecked(true);
+//            QApplication::setStyle(QStyleFactory::create(prevStyle));
+//            //qApp->setStyleSheet("QTabBar::close-button { image: url(:/pmf6.1/pmfsrc/icons/addTab.png) subcontrol-position: left; }");
+//            qApp->setStyleSheet("QTabBar::close-button { image: url(:closeTab.png); subcontrol-position: right;} QTabBar::close-button:hover {image: url(:closeTab_hover.png)}");
+//		}
+//        m_stylesMenu->addAction(pLightAction);
+//        connect(pLightAction, SIGNAL(triggered()), this, SLOT(setStyle()));
+//    }
+//    printf("createStyleMenu pos1\n");
+//#if QT_VERSION >= 0x060500
+//    //Also add "FUSION - DARK" for Windows if Windows is set to DarkMode
+//    m_stylesMenu->addSeparator();
+//    pDarkAction = new QAction("Fusion" + _DARK_THEME, this);
+//    pDarkAction->setCheckable(true);
+//    pDarkAction->setChecked(false);
+//    printf("From QSettings: GString(prevStyle): %s\n", (char*) GString(prevStyle));
+//    /*
+//    if( !Helper::isSystemDarkPalette() )
+//    {
+//        printf("Not SystemDark, disabling darkMode\n");
+//        pDarkAction->setEnabled(false);
+//    }
+//    */
+//    if( GString(prevStyle) == "Fusion" + _DARK_THEME )
+//    {
+//        pDarkAction->setChecked(true);
+//        QApplication::setStyle(QStyleFactory::create(prevStyle));
+//    }
+//    m_stylesMenu->addAction(pDarkAction);
+//    connect(pDarkAction, SIGNAL(triggered()), this, SLOT(setStyle()));
+
+//    /*
+//    for (int i = 0; i < styles.size(); ++i)
+//    {
+//        styleName = (styles.at(i).toLocal8Bit()).data();
+//        if( GString(styleName).lowerCase() != "fusion" ) continue;
+
+//        pDarkAction = new QAction(styleName + _DARK_THEME, this);
+//        pDarkAction->setCheckable(true);
+//        pDarkAction->setChecked(false);
+//        if( GString(prevStyle) == styleName + _DARK_THEME )
+//        {
+//            pDarkAction->setChecked(true);
+//            QApplication::setStyle(QStyleFactory::create(prevStyle));
+//        }
+//        m_stylesMenu->addAction(pDarkAction);
+//        connect(pDarkAction, SIGNAL(triggered()), this, SLOT(setStyle()));
+//    }
+//    */
+//#endif
+//    return m_stylesMenu;
+//}
 
 void Pmf::createMenu(GString dbTypeName)
 {
@@ -336,7 +586,6 @@ void Pmf::createMenu(GString dbTypeName)
     m_mnuSettingsMenu->clear();
     m_mnuMelpMenu->clear();
 
-
     m_cbMenuActionSeq.deleteAll();
 
     //Settings
@@ -344,6 +593,8 @@ void Pmf::createMenu(GString dbTypeName)
     m_mnuSettingsMenu->addSeparator();
     m_mnuSettingsMenu->addAction("Set Font", this, SLOT(setPmfFont()));
     m_mnuSettingsMenu->addAction("Reset Font to default", this, SLOT(resetPmfFont()));
+    m_mnuSettingsMenu->addAction("Set Menu Color", this, SLOT(setConnectionColor()));
+    m_mnuSettingsMenu->addMenu(createStyleMenu());
     m_mnuSettingsMenu->addSeparator();
     m_mnuSettingsMenu->addAction("Connection profiles", this, SLOT(setConnections()));
     if( m_pIDSQL != NULL && m_pIDSQL->getDBType() == POSTGRES )
@@ -419,7 +670,7 @@ void Pmf::createMenu(GString dbTypeName)
     m_mnuBookmarkMenu->addSeparator();
 
     deb("createMenu (10)");
-    m_mnuSettingsMenu->addMenu(createStyleMenu());
+    //m_mnuSettingsMenu->addMenu(createStyleMenu());
     if( dbt == 1 ) m_mnuSettingsMenu->addMenu(createCharForBitMenu());
     m_mnuSettingsMenu->addMenu(createRestoreMenu());
 
@@ -482,20 +733,22 @@ void Pmf::setStyle()
 	//under Windows PMF gets resized and manual resizing is disabled...strange
 	//NOTE: The above Windows problem occurs only when a tabEdit object exists.
     #if defined(MAKE_VC) || defined (__MINGW32__)
-	msg("Changes take effect after restart.");
-	#else
-    msg("Changes take effect after restart.");
+	#else    
 //    qApp->setStyle(action->text());
 //    qApp->setStyle(QStyleFactory::create(action->text()));
-	#endif
+    #endif
     QSettings settings(_CFG_DIR, "pmf6");
+	printf("pmf::setStyle: setting %s\n", (char*) GString(action->text()));
 	settings.setValue("style", action->text());	
 
     QList<QWidget*> widgets = this->findChildren<QWidget*>();
     foreach (QWidget* w, widgets)
     {
-        w->setPalette(m_qPalette);
+		
+        //!DARK w->setPalette(m_qPalette);
     }
+    if( GString(action->text()).occurrencesOf(_DARK_THEME))msg("Note: DarkMode will only work when DarkMode is enabled system-wide.\nChanges take effect after restart.");
+    else msg("Changes take effect after restart.");
 }
 
 
@@ -691,13 +944,14 @@ void Pmf::addNewTab()
     createNewTab("", 0);
 }
 
-void Pmf::setColorScheme(int scheme, QPalette palette)
+void Pmf::setColorScheme(PmfColorScheme scheme, QPalette palette)
 {
     m_iColorScheme = scheme;
     m_qPalette = palette;
 }
-int Pmf::getColorScheme()
-{
+PmfColorScheme Pmf::getColorScheme()
+{	
+return PmfColorScheme::Standard;
     return m_iColorScheme;
 }
 
@@ -736,11 +990,15 @@ void Pmf::createNewTab(GString cmd, int asNext)
     pTE->setFocus();
     m_iCurrentTab = m_tabWdgt->currentIndex();
 
-    pTE->fillDBNameLE(m_gstrDBName);
+    pTE->fillDBNameLE(m_gstrDBName, m_gstrConnectionColor);
 
     pTE->fillSchemaCB( m_strLastSelectedContext, m_strLastSelectedSchema);
 
     pTE->setHistTableName(m_strHistTableName);
+    QString col = "background-color: ";
+    col += (char*) m_gstrConnectionColor;
+    menuBar()->setStyleSheet(col);
+
 
     //connect( m_tabWdgt, SIGNAL( currentChanged ( int ) ), this, SLOT( curTabChg(int) ) );
 
@@ -751,13 +1009,16 @@ void Pmf::createNewTab(GString cmd, int asNext)
     if( cmd.strip().length() && GString(cmd).upperCase().subString(1, 6) == "SELECT")
     {
         pTE->setCmdLine(cmd);
-        pTE->okClick();
+        //pTE->okClick();
+        pTE->reload(cmd, pTE->isChecked(_AUTOLOADTABLE) ? -1 : 0);
+        pTE->setTableNameFromStmt(cmd);
         pTE->fillSelectCBs();
     }
     pTE->loadCmdHist();
     deb("::createNewTab, installing evtFilters...");
     pTE->installEventFilter(this);
     if( !cmd.length() ) pTE->popupTableCB();
+
 
 
 //    QWidget * tabCloseButton;
@@ -823,9 +1084,16 @@ int Pmf::closeDBConn()
 
 int Pmf::loginClicked()
 {
+	
     deb("loginClicked start");
     checkMigration();
+    reconnectTimer->stop();
+    reconnectInfoBox->hide();
     if( closeDBConn() > 0 ) return 0;
+
+    int x, y, w, h;
+    this->getGeometry(&x, &y, &w, &h);
+    printf("in pmf, calling LoginBox, pmfGeometry: x: %i, y: %i, w: %i, h: %i\n", x, y, w, h);
 
     LoginBox * lb = new LoginBox(m_pGDeb, this);
     lb->exec();
@@ -845,8 +1113,6 @@ int Pmf::loginClicked()
         deb("loginClicked: m_pIDSQL is NULL.");
         return 1;
     }
-
-
     else createMenu(m_pIDSQL->getDBTypeName());
     deb("loginClicked, check for _NO_DB...");
 	
@@ -855,10 +1121,14 @@ int Pmf::loginClicked()
     CON_SET curSet;
     m_pIDSQL->currentConnectionValues(&curSet);
     GString conInf = curSet.DB+" ["+curSet.Type+" on "+curSet.Host+":"+curSet.Port+"] - "+Helper::pmfNameAndVersion();
+    ConnSet cs;
+    cs.initConnSet();
+    m_gstrConnectionColor = cs.getConnectionColor(curSet.Type, curSet.DB, curSet.Host, curSet.Port, curSet.UID);
+    m_iReconnectWaitTime  = cs.getReconnectTimeout(curSet.Type, curSet.DB, curSet.Host, curSet.Port, curSet.UID);
+    m_gstrPwdCmd          = cs.getPwdCmd(curSet.Type, curSet.DB, curSet.Host, curSet.Port, curSet.UID);
+    deb("m_iReconnectWaitTime: "+GString(m_iReconnectWaitTime)+", m_gstrPwdCmd: "+m_gstrPwdCmd);
+
     setWindowTitle(conInf);
-
-
-
     m_strHistTableName = histTableName();
 	deb("loginClicked, restoring...");
     setFontFromSettings();
@@ -872,19 +1142,27 @@ int Pmf::loginClicked()
         {
             QWidget* pWdgt = m_tabWdgt->widget(i);
             TabEdit * pTE = (TabEdit*) pWdgt;
-            pTE->fillDBNameLE(m_gstrDBName);
+            pTE->fillDBNameLE(m_gstrDBName, m_gstrConnectionColor);
             pTE->fillSchemaCB(m_actHideSysTabs->isChecked() ? 1 : 0 );
             pTE->loadCmdHist();
         }
-
     }
 	deb("loginClicked, got connInfo.");
     lb->close();
     delete lb;
 	
-    timer = new QTimer( this );
-    connect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
-    timer->start( 1000 );
+
+
+    if( m_iReconnectWaitTime > 0 && m_gstrPwdCmd.length() )
+    {
+        timerCount = 0;
+        reconnectTimer->start( 1000 );
+        //reconnectInfoBox->show();
+    }
+    //VersionCheck
+    versionCheckTimer = new QTimer( this );
+    connect( versionCheckTimer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
+    versionCheckTimer->start( 1000 );
 
 
     aThread = new MyThread;
@@ -955,8 +1233,11 @@ void Pmf::setConfig()
 
 void Pmf::setConnections()
 {
-    ConnSet * foo = new ConnSet(m_pGDeb, this);
+
+    NewConn * foo = new NewConn(this, m_pGDeb);
+    //foo->initConnSet();
 	foo->exec();
+    delete foo;
 }
 
 void Pmf::getNewVersion()
@@ -967,9 +1248,9 @@ void Pmf::getNewVersion()
 
     connect(m_pDownloader, SIGNAL (downloadCompleted()), SLOT (handleDownloadResult()));
     //connect(m_pDownloader, SIGNAL (downloadFailed()), SLOT (downloadFailed));
-    disconnect( timer, SIGNAL(timeout()), this, SLOT(timerEvent()) );
-    timer->start(500);
-    connect( timer, SIGNAL(timeout()), this, SLOT(checkDownloadSize()) );
+    disconnect( versionCheckTimer, SIGNAL(timeout()), this, SLOT(versionCheckTimerEvent()) );
+    versionCheckTimer->start(500);
+    connect( versionCheckTimer, SIGNAL(timeout()), this, SLOT(checkDownloadSize()) );
     downloadInfoBox->show();
     downloadInfoLE->setText("Dowloading");
     remove( newVersionFileLocation() );
@@ -984,7 +1265,6 @@ void Pmf::downloadCancelled()
         m_pDownloader->cancelDownload();
     }    
 }
-
 
 void Pmf::checkDownloadSize()
 {
@@ -1001,7 +1281,7 @@ void Pmf::checkDownloadSize()
 
 void Pmf::handleDownloadResult()
 {
-    timer->stop();
+    versionCheckTimer->stop();
     downloadInfoBox->hide();
     if( m_pDownloader )
     {
@@ -1034,6 +1314,7 @@ void Pmf::showInfo()
 {
     GString s = "PMF (Poor Man's Flight) "+Helper::pmfVersion();
     s += "\n(C) Gregor Leipelt \n\nSee www.leipelt.net for updates and documentation";
+    s += "\nQt version: "+GString(qVersion());
 	msg(s);    
 }
 void Pmf::exportData()
@@ -1076,6 +1357,7 @@ void Pmf::deleteTableContents()
 void Pmf::catalogDBs()
 {
     CatalogInfo *foo = new CatalogInfo(m_pIDSQL, this);
+    foo->createDisplay();
     foo->exec();
 //    SimpleShow * foo = new SimpleShow("DBInfo", this);
 //    DBAPIPlugin* pApi = new DBAPIPlugin(m_pIDSQL->getDBTypeName());
@@ -1188,7 +1470,7 @@ void Pmf::runstats()
 
 void Pmf::tableSizes()
 {
-    TableSize * foo = new TableSize(m_pIDSQL, this, currentSchema(), m_actHideSysTabs->isChecked() ? 1 : 0);
+    TableSize * foo = new TableSize(m_pGDeb, m_pIDSQL, this, currentSchema(), m_actHideSysTabs->isChecked() ? 1 : 0);
 	foo->exec();
     delete foo;
 }
@@ -1201,7 +1483,7 @@ void Pmf::getTabSpace()
 void Pmf::snapShot()
 {
     GetSnap * foo = new GetSnap(m_pIDSQL, this);
-    this->getColorScheme();
+    //!Dark this->getColorScheme();
 
 	foo->setDBName(m_gstrDBName);
 	if( !m_gstrNODE.length() ) m_gstrNODE = "DB2";
@@ -1292,6 +1574,9 @@ void Pmf::resetPmfFont()
     settings.remove("font");
     msg("Please restart PMF for changes to take effect.");
 }
+
+
+
 void Pmf::setPmfFont()
 {
 
@@ -1322,6 +1607,7 @@ void Pmf::setPmfFont()
 	}
 
 }
+
 int Pmf::checkTableSet()
 {
 	if( !currentSchema().length() || !currentTable().length() )
@@ -1416,7 +1702,7 @@ GString Pmf::restoreFileName(int checkForOldFiles )
     }
     else
     {
-        return path +m_gstrDBType+"_"+m_gstrNODE+":"+m_gstrPort+"_"+ m_gstrDBName;
+        return path +m_gstrDBType+"_"+m_gstrNODE+"_"+m_gstrPort+"_"+ m_gstrDBName;
     }
 
 }
@@ -1498,6 +1784,9 @@ void Pmf::createCheckBoxActions()
     m_actConvertGuid = new QAction("Convert GUID", this);
     setAndConnectActions(settings, m_actConvertGuid, _CONVERTGUID, "Y");
 
+    m_actAutoLoadTable = new QAction("Auto load table", this);
+    setAndConnectActions(settings, m_actAutoLoadTable, _AUTOLOADTABLE, "Y");
+
     m_mnuSettingsMenu->addSeparator();
 
     m_actEnterToSave = new QAction("ENTER to Save/Update", this);
@@ -1547,8 +1836,9 @@ void Pmf::checkBoxAction()
     QSettings settings(_CFG_DIR, "pmf6");
 
     if( action == m_actTextCompleter) msg("Changes take effect after restart");
-    if( action == m_actCountAllRows && action->isChecked()) msg("Enabling this will do a \nSELECT COUNT(*) FROM <table>\nthe result will be displayed at the bottom in the 'info' field.\n\nBe aware that this may take a lot of time." );
-    if( action == m_actConvertGuid && action->isChecked()) msg("Enabling this will convert GUIDs between DB2 and SqlServer format." );
+    else if( action == m_actCountAllRows && action->isChecked()) msg("Enabling this will do a \nSELECT COUNT(*) FROM <table>\nthe result will be displayed at the bottom in the 'info' field.\n\nBe aware that this may take a lot of time." );
+    else if( action == m_actConvertGuid && action->isChecked()) msg("Enabling this will convert GUIDs between DB2, SqlServer and Postgres format.\nOnly useful when copying&pasting between those databases." );
+    else if( action == m_actAutoLoadTable ) msg("- Enabled: When you select a table (from the drop-down), it will automatically load.\n- Disabled: After selecting a table, you need to click 'Open' to load it. Use this to avoid long loading times." );
 
     //if( action == m_actShowCloseOnTabs)m_tabWdgt->setTabsClosable(m_tabWdgt->tabsClosable() ? false : true );
 
@@ -1572,19 +1862,20 @@ void Pmf::deb(GString msg)
 }
 void Pmf::showEvent( QShowEvent * evt)
 {
+    printf("Pmf::showEvent, start\n");
    if( m_iShowing ) return;
 #ifndef MAKE_VC
-        return;
+        //return;
 #endif
     QMainWindow::showEvent(evt);
+    printf("Pmf::showEvent, calling login...\n");
     QTimer::singleShot(20, this, SLOT(callLogin()));
 }
 void Pmf::callLogin()
 {    
-
-    loginClicked();
-    deb("callLogin done");
     m_iShowing = 1;
+    loginClicked();
+    deb("callLogin done");	
 }
 void Pmf::showDebug()
 {
@@ -1597,20 +1888,18 @@ void Pmf::showDebug()
     }
 }
 void Pmf::showHelp()
-{
-	
+{	
+    bool res = QDesktopServices::openUrl(QUrl("http://leipelt.de/pmfhowto.html") );
+    if( !res ) msg("Cannot open browser (?), please go to http://leipelt.de");
+    return;
+    /* Not working with darkMode
     QDialog * helpVw = new QDialog(this);
-
     QTextBrowser* browser = new QTextBrowser(helpVw);
-    //QString path = ".";
-    //browser->setSearchPaths(QStringList() << path );
-	
-    //QUrl::toLocalFile()
     browser->resize(800,500);
-
 	helpVw->setWindowTitle("PMF Help - ESC to close");
     browser->setSource( QUrl("qrc:///pmfhelp.htm") );
 	helpVw->show();	
+    */
 			
 }
 DSQLPlugin* Pmf::getConnection()
@@ -1850,7 +2139,6 @@ void Pmf::bookmarkMenuClicked()
 {
     getBookmarks();
 }
-
 
 /*
 bool pmf::eventFilter(QObject* object, QEvent* event)

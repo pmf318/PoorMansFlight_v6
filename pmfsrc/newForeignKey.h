@@ -56,7 +56,7 @@ private slots:
     void addFkClicked();
     void remFkClicked();
 
-    void timerEvent();
+    void versionCheckTimerEvent();
     void OKClicked();
     void tableSelected(QString table);
 

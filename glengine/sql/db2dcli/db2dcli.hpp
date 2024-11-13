@@ -237,7 +237,7 @@ private:
 
 
 
-    VCExport    GString initAll(GString message, unsigned long maxRows = 0, int getLen = 0);
+    VCExport    GString initAll(GString message, long maxRows = -1, int getLen = 0);
     VCExport      void emptyLVSeq();
 
     VCExport      void setCommit(short commit){iCommit = commit;}
@@ -382,6 +382,7 @@ VCExport void writeToLB(QListWidget * pLB, GString message);
     VCExport GString allPurposeFunction(GKeyVal * pKeyVal){ return "";}
     VCExport GString setEncoding(GString encoding);
     VCExport void getAvailableEncodings(GSeq<GString> *encSeq);
+    VCExport GString reconnect(CON_SET *pCS);
 };
 
 

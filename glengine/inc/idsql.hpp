@@ -163,9 +163,13 @@ typedef struct CN_SET{
     GString Host;
     GString Port;
     GString CltEnc;
+    GString PwdCmd;
+    GString Color;
+    GString Options;
     int DefDB;
     int CSVer;
-    void init(){Type=DB=UID=PWD=Host=CltEnc=""; DefDB=CSVer=0;}
+    int ReconnTimeout;
+    void init(){Type=DB=UID=PWD=Host=CltEnc=""; DefDB=CSVer=ReconnTimeout=0; PwdCmd=""; Color = ""; }
 }  CON_SET;
 
 typedef struct CL_SPC{
@@ -254,7 +258,7 @@ static GString _DBTEMPLATE    = "DbTemplate";
     virtual GString connect(CON_SET * pCs) = 0;
     virtual int disconnect() = 0;
     virtual void currentConnectionValues(CON_SET * conSet) = 0;
-    virtual GString initAll(GString message, unsigned long maxRows = 0, int getLen = 0) = 0;
+    virtual GString initAll(GString message, long maxRows = -1, int getLen = 0) = 0;
     virtual void setTruncationLimit(int limit) = 0;
     virtual int commit() = 0;
     virtual int rollback() = 0;
@@ -366,6 +370,7 @@ static GString _DBTEMPLATE    = "DbTemplate";
     virtual GString setEncoding(GString encoding) = 0;
     virtual GString allPurposeFunction(GKeyVal * pKeyVal) = 0;
     virtual void getAvailableEncodings(GSeq <GString> *encSeq) = 0;
+    virtual GString reconnect(CON_SET *pCS) = 0;
 };
 
 #endif

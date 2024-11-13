@@ -138,7 +138,7 @@ private:
     GString removeStartToken(GString in);
     GSeq <GString> allWords;
     void readAllWords();
-    GSeq <GXML_ATTR> attributeSeq(GString in = "");
+    GSeq <GXML_ATTR> fillAttributeSeq(GString in = "");
     GString getValue(GString in);
 
     void readAllNodes(GString input);
@@ -150,5 +150,6 @@ private:
     char* addChars(char* buf, int *pos, char ch, char nextCh, long *size);
     char* addGString(char* buf, int *pos, GString in, long *size);
     GXmlNode * pRootNode;
+    GSeq <GXML_ATTR> _attrSeq;
 };
 #endif

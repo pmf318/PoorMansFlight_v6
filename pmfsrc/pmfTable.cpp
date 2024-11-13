@@ -153,6 +153,17 @@ GString PmfTable::createTabStmt()
     if( m_pDSQL->getDBType() == DB2ODBC || m_pDSQL->getDBType() == DB2 ) out = out.stripTrailing(",")+")";
     else out = out.stripTrailing(",")+");\n\n";
     m_createStatement = out;
+
+    if( m_pDSQL->getDBType() == POSTGRES )
+    {
+        GString cmd = "SELECT tableowner from pg_catalog.pg_tables where schemaname='"+tabSchema()+"' and ";
+        cmd += "tablename='"+tabName()+"'";
+        GString err = m_pDSQL->initAll(cmd);
+        if( err.length() == 0 && m_pDSQL->numberOfRows() == 1)
+        {
+            m_createStatement += "alter table "+m_tableName+" owner to \""+m_pDSQL->rowElement(1,1).strip("'")+"\"";
+        }
+    }
     return m_createStatement;
 }
 

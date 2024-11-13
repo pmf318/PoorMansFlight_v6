@@ -80,7 +80,7 @@ private slots:
     void getFileClicked();
     void deleteErrLog();
     void schemaSelected(int index);
-    void timerEvent();
+    void versionCheckTimerEvent();
     void optionSelected();
     void typeSelected();
     void optionsClicked();
@@ -119,6 +119,7 @@ private:
     int loadFileIntoBuf(GString fileName, char* fileBuf, int *size);
     int loadFileIntoBuf(GString fileName, GString* data);
     int runCsvChecks(PmfTable * pmfTable, GString line, GString delim);
+    void deb(GString fnName, GString txt);
 
     GString iSchema;
     QPushButton * ok, * cancel, *getFileB, *delLog;

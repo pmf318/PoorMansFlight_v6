@@ -15,6 +15,7 @@
 #include <QClipboard>
 #include <QWidgetAction>
 #include <QLineEdit>
+#include <QGroupBox>
 
 #include <gstring.hpp>
 #include <gseq.hpp>
@@ -140,15 +141,15 @@ public:
     void fillSchemaCB(GString context = "", GString selectSchema = "");
 	int canClose(); 
     //void fillDBNameCB(GSeq <CON_SET*> * dbNameSeq);
-    void fillDBNameLE(GString dbName);
-	void initDSQL();
+    void fillDBNameLE(GString dbName, GString color);
+    void initDSQL(long maxRows);
 	void setMaxRows(GString maxRows);
 	GString getSQL();
     GString getLastSelect();
 	GString getDB();
     GString currentTable(int wrapped = 1 );
 	void loadBookmark(GString table, GString cmd);
-	void reload(GString cmd = "");
+    void reload(GString cmd = "", long maxRows = -1);
 	void setCmdText(GString cmd);
     GString getCmdText();
 	void setExtSqlCmd(GString cmd); 
@@ -175,20 +176,23 @@ public:
     GString createFullConstraint(int row, GSeq<GString> *unqCols);
 	void setGDebug(GDebug * gd);
     int writeDataToFile(QTableWidgetItem* pItem, GString file, int* outSize);
-    int writeDataToFile(GString cmd, GString file, int * outSize);
+    int writeDataToFile(GString file, int * outSize);
     void setCellFont(QFont* font);
     void initTxtEditor(TxtEdit * pTxtEdit);
     GString createUniqueColConstraint(QTableWidgetItem * pItem);
     GString createUniqueColConstraintForItem(QTableWidgetItem * pItem, GSeq <GString> * unqCols);
     void showHint(int hint, GString txt = "");
     void setColorScheme(int usePmf);
-    int colorScheme();
+    PmfColorScheme colorScheme();
     int isChecked(GString name);
     GString updateRow(QTableWidgetItem * pItem, DSQLPlugin *pDSQL, GSeq<GString> *unqCols, int lobCol = -1, GString lobTmpFile = "");
     GString updateRowViaUniqueCols(QTableWidgetItem* pItem, DSQLPlugin * pDSQL, GSeq<GString> *unqCols, int lobCol, GString lobTmpFile );
     int isNewRow(QTableWidgetItem *pItem);
     GDebug *getGDeb();
     QTableWidgetItem * currentItem();
+    void changePalette();
+    void createInfoArea();
+    void setReconnInfo(GString txt);
 
 
 
@@ -202,6 +206,7 @@ public:
     GString lastSqlSelectCmd();
     void reloadSchemaAndTableBoxes();
     void setEncoding(GString encoding);
+    GString reconnect(CON_SET *pCS);
 
     DSQLPlugin* m_pMainDSQL;
 
@@ -227,7 +232,7 @@ private:
     GDebug * m_pGDeb;
 
 
-    int m_iUseColorScheme;
+    PmfColorScheme m_iUseColorScheme;
     int m_iUseThread;
 
 
@@ -237,6 +242,7 @@ private:
     QTableWidget * mainWdgt;
 
     QMenuBar *menu;
+    QGroupBox * upperBox;
     QMenu actionsMenu;
     QTabWidget * m_qTabWDGT;
     int isGeneratedColumn(int i);
@@ -250,6 +256,8 @@ private:
 	signed int m_iLastSortedColumn;
 	int m_iIsSortedAsc;
 	GString m_gstrCurrentSchema;
+    QGroupBox * reconnectInfoBox;
+    QLineEdit * reconnectInfoLE;
 	
 	void createActions();
 	
@@ -271,6 +279,7 @@ private:
 	void setButtonState(bool state);
     void setPendingMsg(int reset = 0);
 	void setInfo(GString txt, int blink = 0);
+
 	void clearMainWdgt();
 	void addInfoGrid(QGridLayout* pGrid);
     GString deleteByCursor(DSQLPlugin * pDSQL);
@@ -295,7 +304,7 @@ private:
     GString deleteThisRow(long pos, DSQLPlugin * pDSQL, GSeq<GString> *unqCols, int yesToAll = 0);
     int     hasUsableColumns();
 	int isOrderStmt(GString cmd);
-	unsigned int maxRows();
+
 	void addToStoreCB(QString s, int writeToFile = 1);
 	void showData();
     
@@ -320,7 +329,7 @@ private:
 
     GString m_strHistTableName;
     GString wrap(GString in);
-    void setTableNameFromStmt(GString in);
+
 	int isIdentityColumn(int colNr);
     int isIdentityColumn(GString colName);
 	void readColumnDescription(GString table);
@@ -338,6 +347,7 @@ private:
     void restoreColWidths();
     void saveColWidths();
     void clearColWidthSeq();
+
     GSeq <COL_WIDTH*> _colWidthSeq;
 
 
@@ -357,7 +367,6 @@ private:
 
 
 	GString m_gstrSQLCMD;
-	long m_lMaxRows;
 
 	GString m_gstrSqlErr;
 	GString m_gstrExtSqlCmd;
@@ -443,7 +452,7 @@ public slots:
 	void  mainWdgtDoubleClicked();
 	void schemaSelected(int index);
 	void tableSelected();
-	void timerEvent(QTimerEvent*);
+	void versionCheckTimerEvent(QTimerEvent*);
 	GString currentSchema();
     GString currentContext();
     int writeHist(GString table, GString action, QTableWidgetItem * pItem, GString sqlCmd = "");
@@ -483,10 +492,13 @@ public slots:
     void itemDoubleClicked(int row, int column);
     void showDbConnInfo();
     //void slotDBNameSelected();
+    void upperGroupBoxClicked();
 
     void exportData();
     void importData();
-
+    void reconnectNowClicked();
+    void setTableNameFromStmt(GString in);
+    unsigned int getMaxRows();
 
 	
     void getUserAction();

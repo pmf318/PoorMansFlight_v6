@@ -11,7 +11,7 @@
 #define 	INT4_PMF   23
 #define 	REGPROC_PMF   24
 #define 	TEXT_PMF   25
-#define 	_PMF_PMF   26
+#define 	OID_PMF   26
 #define 	TID_PMF   27
 #define 	XID_PMF   28
 #define 	CID_PMF   29

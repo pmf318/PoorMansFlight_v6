@@ -388,6 +388,7 @@ void createFromQBytes(QByteArray * bytes)
   VCExport unsigned char* asBinary();
   VCExport GString toBase64();
   VCExport GString fromBase64();
+  VCExport GString makePretty();
 
 
 
