@@ -5,11 +5,11 @@ Windows:\
 [PMF5 installer](https://github.com/pmf318/PoorMansFlight_v5/raw/refs/heads/main/pmf5setup_64bit.exe)\
 [PMF5 Portable ](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf5_portable.zip) (Just unzip and run, no need to install)
 
-[PMF6 installer](https://github.com/pmf318/PoorMansFlight_v5/raw/refs/heads/main/pmf6setup_64bit.exe)\
-[PMF6 Portable](https://github.com/pmf318/PoorMansFlight_v6/blob/main/bin/pmf6_portable.zip) (Just unzip and run, no need to install)
+[PMF6 installer](https://github.com/pmf318/PoorMansFlight_v5/raw/refs/heads/main/bin/pmf6setup_64bit.exe)\
+[PMF6 Portable](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf6_portable.zip) (Just unzip and run, no need to install)
 
 Linux:\
-[App Image](https://github.com/pmf318/PoorMansFlight_v6/blob/main/bin/pmf-x86_64.AppImage)\
+[App Image](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf-x86_64.AppImage)\
 This is an AppImage (ready-to-run), and requires "FUSE" to be installed
 
 --Install required dependencies. Example for Debian:
