@@ -1,5 +1,6 @@
 
-#### Below are precompiled versions for Windows and Linux.
+### Below are precompiled (ready-to-run) versions for Windows and Linux.
+
 
 **PMF v5**: Supports older Windows versions (Win8 and Win2018 Server, but not Win7)\
 **PMF v6**: Supports DarkMode on Win10 and Win11
