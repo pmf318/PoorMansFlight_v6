@@ -22,4 +22,4 @@ $ chmod +x pmf-x86_64.AppImage
 $ ./pmf-x86_64.AppImage
 
 Source code:\
-[Source code for Windows and Linux](https://github.com/pmf318/PoorMansFlight_v6/blob/main/bin/pmf.tar.gz)
+[Source code for Windows and Linux](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf.tar.gz)
