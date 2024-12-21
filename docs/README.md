@@ -6,7 +6,7 @@
 **PMF v6**: Supports DarkMode on Win10 and Win11
 
 **Installer**: This will install PMF on your windows machine.\
-**Portable**: The zipped file contains executable and all dependenciws, no need to install anything.
+**Portable**: The zipped file contains executable and all dependencies, no need to install anything.
 
 #### PMF for Windows:
 [PMF v5 installer](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf5setup_64bit.exe)\
