@@ -12,7 +12,7 @@
 [PMF v5 installer](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf5setup_64bit.exe)\
 [PMF v5 Portable ](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf5_portable.zip) 
 
-[PMF v6 installer](https://github.com/pmf318/PoorMansFlight_v5/raw/refs/heads/main/bin/pmf6setup_64bit.exe)\
+[PMF v6 installer](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf6setup_64bit.exe)\
 [PMF v6 Portable](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf6_portable.zip) 
 
 #### PMF for Linux:
