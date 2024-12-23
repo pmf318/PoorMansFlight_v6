@@ -1,6 +1,13 @@
 
 ### Below are precompiled (ready-to-run) versions for Windows and Linux.
 
+PMF is an open source table editor for Windows and Linux. Currently supported databases: DB2, SqlServer, Postgres and MariaDB/MySQL and anything ODBC.
+
+Features include direct editing of XML data, support for LargeObjects (LOBs), various export and import functions.
+
+See leipelt.de for more info.
+
+
 
 **PMF v5**: Supports older Windows versions (Win8 and Win2018 Server, but not Win7)\
 **PMF v6**: Supports DarkMode on Win10 and Win11
@@ -32,7 +39,7 @@ Then simply start the AppImage:
 #### Source code:
 [Source code for Windows and Linux](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf.tar.gz)
 
-### Readme
+
 PMF is an open source table editor for Windows and Linux. Currently supported databases: DB2, SqlServer, Postgres and MariaDB/MySQL and anything ODBC.
 
 Features include direct editing of XML data, support for LargeObjects (LOBs), various export and import functions.
