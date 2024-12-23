@@ -1,7 +1,7 @@
 
 ### Below are precompiled (ready-to-run) versions for Windows and Linux.
 
-PMF is an open source table editor for Windows and Linux. Currently supported databases: DB2, SqlServer, Postgres and MariaDB/MySQL and anything ODBC.
+PMF is an open source table editor for Windows and Linux with a feature-rich GUI. Currently supported databases: DB2, SqlServer, Postgres and MariaDB/MySQL and anything ODBC.
 
 Features include direct editing of XML data, support for LargeObjects (LOBs), various export and import functions.
 
