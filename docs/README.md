@@ -22,7 +22,7 @@ See leipelt.de for more info.
 [PMF v6 installer](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf6setup_64bit.exe)\
 [PMF v6 Portable](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf6_portable.zip) 
 
-#### PMF for Linux:
+#### PMF for Linux (for 32-bit and 64-bit Linux):
 [App Image](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf-x86_64.AppImage)\
 This is an AppImage (ready-to-run), and requires "FUSE" to be installed
 
