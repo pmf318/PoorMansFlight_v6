@@ -15,7 +15,7 @@ See leipelt.de for more info.
 **Installer**: This will install PMF on your windows machine.\
 **Portable**: The zipped file contains executable and all dependencies, no need to install anything.
 
-#### PMF for Windows:
+#### PMF for Windows (all versions are 64-bit):
 [PMF v5 installer](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf5setup_64bit.exe)\
 [PMF v5 Portable ](https://github.com/pmf318/PoorMansFlight_v6/raw/refs/heads/main/bin/pmf5_portable.zip) 
 
