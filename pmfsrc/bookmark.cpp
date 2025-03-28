@@ -179,11 +179,7 @@ GString BookmarkSeq::bmFileName()
     deb("bmFileName start");
     QString home = QDir::homePath ();
     if( !home.length() ) return "";
-    #ifdef MAKE_VC
-    return GString(home)+"\\"+_CFG_DIR+"\\"+_BM_FILE;
-    #else
-    return GString(home)+"/."+_CFG_DIR + "/"+_BM_FILE;
-    #endif
+    return basePath() + _BM_FILE;
 }
 
 void BookmarkSeq::deb(GString msg)

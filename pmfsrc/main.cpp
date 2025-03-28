@@ -46,7 +46,6 @@
   #define min(A,B) ((A) <(B) ? (A):(B))
 #endif
 
-int readInitFile(int * x, int * y, int * w, int *h);
 void saveInitFile(int x, int y, int w, int h);
 void checkGeometry(Pmf * mainApp);
 QRect getDefaultGeometry();
@@ -342,27 +341,6 @@ QRect getDefaultGeometry()
     h = min(h, screen.height()-y);
     w = min(w, screen.width()-x);
     return QRect(x, y, w, h);
-}
-
-
-int readInitFile(int * px, int * py, int * pw, int * ph)
-{
-    QString home = QDir::homePath ();
-	if( !home.length() ) return 1;
-	GString initFile = GString(home)+"\\"+_CFG_DIR+"\\"+_INIT_FILE; 	
-	GFile f(initFile);	
-	if( !f.initOK() ) return 2;
-	int x = f.getKey("POSX").asInt();
-	int y = f.getKey("POSY").asInt();
-	int w = f.getKey("WIDTH").asInt();
-	int h = f.getKey("HEIGHT").asInt();
-	//if( 0 == x && 0 == y || ( 0 == x+y ) ) return 3;	
-	*px = x < 0 ? 0 : x;
-	*py = y < 0 ? 0 : y;
-	*pw = w < 0 ? 0 : w;
-	*ph = h < 0 ? 0 : h;
-	
-	return 0;
 }
 
 void saveInitFile(int x, int y, int w, int h)

@@ -1341,6 +1341,11 @@ int odbcDSQL::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
             cmd += "and table_name='"+tabName(table)+"'";
     GString s = this->initAll(cmd);
 
+
+    odbcDSQL tmpSql(*this);
+    tmpSql.initAll("select * from "+table, 0);
+
+
     COL_SPEC *cSpec;
     GString tmp;
     for( unsigned i=1; i<=this->numberOfRows(); ++i )
@@ -1348,8 +1353,9 @@ int odbcDSQL::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
 
         cSpec = new COL_SPEC;
         cSpec->ColName  = this->rowElement(i,1).strip("'");
-        cSpec->ColType  = this->rowElement(i,2).strip("'");
-        tmp = GString(cSpec->ColType).upperCase();
+        cSpec->ColType = tmpSql.sqlType(cSpec->ColName);
+        cSpec->ColTypeName  = this->rowElement(i,2).strip("'");
+        tmp = GString(cSpec->ColTypeName).upperCase();
 
         /* SMALLINT, INTEGER, BIGINT, DOUBLE */
         if( tmp.occurrencesOf("INT") > 0 ||

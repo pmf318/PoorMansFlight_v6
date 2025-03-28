@@ -886,13 +886,13 @@ GString ImportBox::createDb2CsvInsertCmd(PmfTable * pmfTable, GString line, GStr
         if( pmfTable->column(i)->identity().length()  ) continue;
         PmfColumn *pCol = pmfTable->column(i);
         GString x = elmts.elementAtPosition(i);
-        if( elmts.elementAtPosition(i) != "NULL" && pCol->colType() == "BLOB" && byteaAsFile )
+        if( elmts.elementAtPosition(i) != "NULL" && pCol->colTypeName() == "BLOB" && byteaAsFile )
         {
             cmd += GString("?,");
             lobFileSeq.add(elmts.elementAtPosition(i));
             lobTypeSeq.add(404);
         }
-        else if( elmts.elementAtPosition(i) != "NULL" && pCol->colType() == "XML" && xmlAsFile)
+        else if( elmts.elementAtPosition(i) != "NULL" && pCol->colTypeName() == "XML" && xmlAsFile)
         {
             cmd += GString("?,");
             lobFileSeq.add(elmts.elementAtPosition(i));
@@ -947,9 +947,9 @@ GString ImportBox::createPgsqlCsvInsertCmd(PmfTable * pmfTable, GString line, GS
         if( pmfTable->column(i)->identity().length()  ) continue;
         PmfColumn *pCol = pmfTable->column(i);
         if( elmts.elementAtPosition(i) != "NULL" &&
-               (  (pCol->colType() == "bytea"  && byteaAsFile) ||
-                  (pCol->colType() == "text"  && byteaAsFile) ||
-                  (pCol->colType() == "xml"  && xmlAsFile) ) )
+               (  (pCol->colTypeName() == "bytea"  && byteaAsFile) ||
+                  (pCol->colTypeName() == "text"  && byteaAsFile) ||
+                  (pCol->colTypeName() == "xml"  && xmlAsFile) ) )
         {
             loadFileIntoBuf(elmts.elementAtPosition(i), &data);
             cmd += data + GString(",");

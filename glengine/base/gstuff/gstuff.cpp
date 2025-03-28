@@ -406,12 +406,24 @@ GString GStuff::wrap(GString in)
 {
     return "\""+in+"\"";
 }
-GString GStuff::formatForXml(GString in)
+
+GString GStuff::changeToXml(GString in)
 {
     in = in.change("&", "&amp;");
-    in = in.change("\"", "&quot;").change("<", "&lt;").change(">", "&gt;").change("'", "&apos;").change("/", "&#47;").change("(", "&#40;").change(")", "&#41;");
+    in = in.change("\"", "&quot;").change("<", "&lt;").change(">", "&gt;").change("'", "&apos;").change("/", "&#47;");
+            //.change("(", "&#40;").change(")", "&#41;");
     return in;
 }
+
+GString GStuff::changeFromXml(GString in)
+{
+    in = in.change("&amp;", "&");
+    in = in.change("&quot;", "\"").change("&lt;", "<").change("&gt;", ">").change("&apos;", "'").change("&#47;", "/");
+            //.change("&#40;", "(").change("&#41;", ")");
+    return in;
+}
+
+
 GString GStuff::decorateTabName(GString in)
 {
     if( !in.length() || in.occurrencesOf(".") == 0 ) return in;

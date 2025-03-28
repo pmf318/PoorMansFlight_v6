@@ -914,6 +914,10 @@ int mariaDB::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
     GString tabSchema = this->tabSchema(table);
     GString tabName   = this->tabName(table);
 
+    mariaDB tmpSql(*this);
+    tmpSql.initAll("select * from "+table, 0);
+
+
     this->setCLOBReader(1); //This will read any CLOB into fieldData
 
     GString cmd = "SELECT column_name, data_type, character_maximum_length, numeric_precision, is_nullable, column_default, numeric_scale FROM information_schema.COLUMNS WHERE TABLE_SCHEMA='"+tabSchema+"' AND table_name='"+tabName+"'";
@@ -931,31 +935,32 @@ int mariaDB::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         cSpec->init();
 
         cSpec->ColName = this->rowElement(i,1).strip("'");
+        cSpec->ColType = tmpSql.sqlType(cSpec->ColName);
 
         /* colType CHARACTER (from syscat.tables) needs to be truncated to CHAR */
-        cSpec->ColType = this->rowElement(i,2).strip("'");
-        if( cSpec->ColType == "CHARACTER" ) cSpec->ColType = "CHAR";
+        cSpec->ColTypeName = this->rowElement(i,2).strip("'");
+        if( cSpec->ColTypeName == "CHARACTER" ) cSpec->ColTypeName = "CHAR";
 
 
         /* SMALLINT, INTEGER, BIGINT, DOUBLE */
-        if( cSpec->ColType.occurrencesOf("int") > 0 ||
-                cSpec->ColType.occurrencesOf("double") > 0 ||
-                cSpec->ColType.occurrencesOf("float") > 0 ||
-                cSpec->ColType.occurrencesOf("date") > 0 ||
-                cSpec->ColType.occurrencesOf("time"))
+        if( cSpec->ColTypeName.occurrencesOf("int") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("double") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("float") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("date") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("time"))
         {
             cSpec->Length = "N/A";
         }
         /* DECIMAL: (LENGTH, SCALE) */
-        else if( cSpec->ColType.occurrencesOf("decimal") )
+        else if( cSpec->ColTypeName.occurrencesOf("decimal") )
         {
             cSpec->Length = this->rowElement(i,4).strip("'").strip()+". "+this->rowElement(i,7).strip("'").strip();
         }
-        else if( cSpec->ColType.occurrencesOf("XML") )
+        else if( cSpec->ColTypeName.occurrencesOf("XML") )
         {
             cSpec->Length = "0";
         }
-        else if( cSpec->ColType.occurrencesOf("LONG VARCHAR") || cSpec->ColType.occurrencesOf("LONG CHAR") )
+        else if( cSpec->ColTypeName.occurrencesOf("LONG VARCHAR") || cSpec->ColTypeName.occurrencesOf("LONG CHAR") )
         {
             cSpec->Length = "N/A";
         }
@@ -965,7 +970,7 @@ int mariaDB::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         {
             cSpec->Length = this->rowElement(i,3).strip("'");
         }
-        if( (cSpec->ColType.occurrencesOf("CHAR")) && this->rowElement(i, 11) == "0" ) //codepage is 0 for CHAR FOR BIT
+        if( (cSpec->ColTypeName.occurrencesOf("CHAR")) && this->rowElement(i, 11) == "0" ) //codepage is 0 for CHAR FOR BIT
         {
             cSpec->Misc = "FOR BIT DATA";
         }

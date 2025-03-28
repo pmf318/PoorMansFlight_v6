@@ -550,9 +550,10 @@ void LoginBox::okClicked()
     deb("calling setEncoding: "+encoding);
     m_pIDSQL->setEncoding(encoding);
     GKeyVal gkv;
+
     gkv.readFromFile(lastConnDataSettings());
     gkv.addOrReplace(GString(dbTypeCB->currentText())+GString(hostNameCB->currentText()), dbName);
-    gkv.toFile(lastConnDataSettings());
+    gkv.saveAsXml(lastConnDataSettings());
     deb("LoginBox, okClicked end");
 
 }
@@ -791,6 +792,7 @@ void LoginBox::fillDbNameCB(GString host)
     getConnDataSlot(0);
 }
 
+
 void LoginBox::fillHostNameCB(GString dbType)
 {
     deb("fillDbNameCB, start");
@@ -926,8 +928,6 @@ void LoginBox::setDefaultCon()
 
 void LoginBox::findDatabases()
 {
-    GString host = getHost(hostNameCB->currentText());
-
     //if( host != LGNBOX_FIND_DATABASES ) return;
 
     GSeq <CON_SET*> conSetList;
@@ -938,7 +938,6 @@ void LoginBox::findDatabases()
     if( conSetList.numberOfElements() == 0 ) return;
 
 
-    //hostNameCB->clear();
     deb("getConnData, getting databases...");
     deb("getConnData, getting databases, found "+GString(conSetList.numberOfElements())+" databases.");    
     CON_SET* pCS = conSetList.elementAtPosition(1);
@@ -947,10 +946,6 @@ void LoginBox::findDatabases()
     if( pCS->PwdCmd.length() )passWordLE->setText(pCS->PwdCmd);
     else passWordLE->setText(pCS->PWD);
     passWordLE->setText(pCS->PWD);
-
-
-     //Helper::runStuffInProcess("C:\\Client_Tools\\Powershell\\pwsh.exe -File \"C:\\Client_Tools\\tools\\ad_connect.ps1\"");
-    //hostNameCB->addItem(LGNBOX_FIND_DATABASES);
 
     int saveCon = 0;
     if( QMessageBox::question(this, "PMF", "Found "+GString(conSetList.numberOfElements())+" databases. Save connection information?", QMessageBox::Yes, QMessageBox::No) == QMessageBox::Yes )saveCon = 1;
@@ -969,8 +964,6 @@ void LoginBox::findDatabases()
     if( pos != -1 )hostNameCB->setCurrentIndex(pos);
     dbNameCB->setCurrentIndex(0);
     dbNameCB->setFocus();
-
-
     return;
 }
 

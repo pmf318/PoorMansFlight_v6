@@ -14,6 +14,7 @@
 #include <qlayout.h>
 #include "pmfSchemaCB.h"
 #include "pmf.h"
+#include "pmfTable.h"
 
 Querydb::Querydb( DSQLPlugin* pDSQL, Pmf* parent, GString currentSchema, int hideSysTabs )
  :QDialog(parent)
@@ -52,15 +53,23 @@ Querydb::Querydb( DSQLPlugin* pDSQL, Pmf* parent, GString currentSchema, int hid
 	connect( okB, SIGNAL(clicked()), SLOT(okClicked()) );
 	okB->setText( "Go!" );
     okB->setAutoRepeat( false );
-    //okB->setAutoResize( false );
 
 	cancelB = new QPushButton(pane);
 	connect( cancelB, SIGNAL(clicked()), SLOT(cancelClicked()) );
 	cancelB->setText( "Cancel" );
     cancelB->setAutoRepeat( false );
-    //cancelB->setAutoResize( false );
+
+    copyToClipboardB = new QPushButton(pane);
+    connect( cancelB, SIGNAL(clicked()), SLOT(cancelClicked()) );
+    copyToClipboardB->setText( "Copy to clipboard" );
+    copyToClipboardB->setAutoRepeat( false );
+    copyToClipboardB->setEnabled(false);
+    connect( copyToClipboardB, SIGNAL(clicked()), SLOT(copyToClipboard()) );
+
+
 	btGrid->addWidget(okB, 0, 0);
 	btGrid->addWidget(cancelB, 0, 1);
+    btGrid->addWidget(copyToClipboardB, 0, 2);
 
     tbSel = new TableSelector(pDSQL, parent, currentSchema, hideSysTabs);
 
@@ -108,6 +117,17 @@ void Querydb::listDoubleClicked(QListWidgetItem * pItem)
             m_pPmf->createNewTab(m_cmdSeq.elementAtPosition(i+1), 0);
         }
     }
+}
+
+void Querydb::copyToClipboard()
+{
+    GString data;
+    for(int i = 0; i < resultLB->count(); ++i)
+    {
+        data += resultLB->item(i)->text() + "\n";
+    }
+    QApplication::clipboard()->setText(data, QClipboard::Clipboard);
+//    GString txt = GString(QApplication::clipboard()->text());
 }
 
 void Querydb::okClicked()
@@ -169,6 +189,27 @@ void Querydb::searchInTable(GString table, QProgressDialog * apd)
 
     if( hostRB->isChecked() )
 	{
+        PmfTable pmfTable(m_pDSQL, table);
+        for( int i = 1; i <= pmfTable.columnCount(); ++i )
+        {
+            found = 0;
+            if( apd->wasCanceled() ) break;
+            findStr = GString(findLE->text());
+            GString colName = pmfTable.column(i)->colName();
+            if( exactMatchCB->isChecked())
+            {
+                if( findStr == colName ) found = 1;
+            }
+            else if( colName.upperCase().occurrencesOf(findStr.upperCase()) > 0 ) found = 1;
+
+            if(found)
+            {
+                result = "Found Column "+colName+" In Table "+table;
+                resultLB->addItem( result );
+                m_cmdSeq.add("SELECT * FROM "+table);
+            }
+        }
+        /*
         sel = m_pDSQL->initAll("SELECT colname FROM syscat.columns where tabschema='"+Helper::tableSchema(table, DB2) +
               "' and tabname='"+Helper::tableName(table, DB2)+"'");
         for( i=1; i<=m_pDSQL->numberOfRows(); ++i )
@@ -189,6 +230,7 @@ void Querydb::searchInTable(GString table, QProgressDialog * apd)
                 m_cmdSeq.add("SELECT * FROM "+table);
             }
         }
+        */
 
 //        sel = m_pDSQL->initAll("SELECT * FROM "+table, 1);
 
@@ -257,6 +299,8 @@ void Querydb::searchInTable(GString table, QProgressDialog * apd)
 		} //end for
         delete tmpDSQL;
 	} //end if Value or Host
+    if( resultLB->count() ) copyToClipboardB->setEnabled(true);
+    else copyToClipboardB->setEnabled(false);
 }
 
 void Querydb::cancelClicked()

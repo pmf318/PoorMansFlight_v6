@@ -15,7 +15,8 @@ public:
 
 private:
      GString _colName;
-     GString _colType;
+     GString _colTypeName;
+     int     _colType;
      GString _length;
      GString _scale;
      GString _nullable;
@@ -33,8 +34,8 @@ public:
 
     const GString colName(){return _colName;}
     const GString quotedName();
-
-    const GString colType() {return _colType;}
+    const int     colType() {return _colType; }
+    const GString colTypeName() {return _colTypeName;}
     const GString colLength() {return _length;}
     const GString scale() {return _scale;}
     const GString nullable() {return _nullable;}

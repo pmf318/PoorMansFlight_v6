@@ -62,6 +62,8 @@ private:
     void deb(GString msg);
     GSeq <KEY_VAL*> _keyValSeq;
     GDebug * m_pGDB;
+
+
 public:
    VCExport   GKeyVal(int debugMode = 0);
    VCExport   ~GKeyVal();
@@ -75,8 +77,11 @@ public:
    VCExport   KEY_VAL *elementAtPosition(int idx);
    VCExport   GString getValForKey(GString key);
    VCExport   int hasKey(GString key);
-   VCExport   int toFile(GString fileName);
+   //VCExport   int toFile(GString fileName);
+   VCExport    int saveAsXml(GString fileName);
    VCExport   int readFromFile(GString fileName);
+//   VCExport   int toXmlFile(GString fileName);
+   VCExport   int readFromXmlFile(GString fileName);
    VCExport   int replaceValue(GString key, GString value);
    VCExport   void addOrReplace(GString key, GString value);
 

@@ -145,7 +145,7 @@ GString PmfTable::createTabStmt()
         else if( pmfCol->colLength() == "NULL" ) colLen = " ";
         else colLen = "("+pmfCol->colLength() +") ";
 
-        out += colName + pmfCol->colType() +" " + colLen + pmfCol->nullable()+" "+pmfCol->misc()+" "+defVal;
+        out += colName + pmfCol->colTypeName() +" " + colLen + pmfCol->nullable()+" "+pmfCol->misc()+" "+defVal;
 
         if( i < (int)m_colSeq.numberOfElements() ) out = out.strip()+",\n";
         else out+="\n";

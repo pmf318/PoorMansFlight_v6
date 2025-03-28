@@ -172,7 +172,9 @@ GString PmfCfg::cfgFileName()
 {
 	QString home = QDir::homePath ();
 	if( !home.length() ) return "";
-    #if defined(MAKE_VC) || defined (__MINGW32__)
+    return basePath() + _CFGFILE;
+
+    #if defined(MAKE_VC) || defined (__MINGW32__)    
 	return GString(home)+"\\"+_CFG_DIR+"\\"+_CFGFILE;
 	#else
 	return GString(home)+"/."+_CFG_DIR + "/"+_CFGFILE;

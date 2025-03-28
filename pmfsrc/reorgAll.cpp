@@ -297,7 +297,7 @@ void ReorgAll::writeTable(QFile *outFile, OptionsTab* pOptTab)
 
     if( pOptTab->getCheckBoxValue(XMLDDL_GROUPNAME, XMLDDL_WRITE_TABSTMT) )
     {
-        createTabStmt = " stmt=\""+GStuff::formatForXml(createTabStmt).removeButOne()+";\"";
+        createTabStmt = " stmt=\""+GStuff::changeToXml(createTabStmt).removeButOne()+";\"";
     }
     else createTabStmt = "";
 
@@ -330,6 +330,7 @@ void ReorgAll::writeColumns( QFile *outFile)
         for( int j = 0; j < tabWdgt->columnCount(); ++j )
         {
             data = tabWdgt->item(i,j)->text();
+            data = GStuff::changeToXml(data);
             column = tabWdgt->horizontalHeaderItem(j)->text().toLower();
             if( GString(column).upperCase() == "NULLABLE")
             {
@@ -359,7 +360,7 @@ void ReorgAll::writeMQT(QFile *outFile, OptionsTab* pOptTab)
 
     if( pOptTab->getCheckBoxValue(XMLDDL_GROUPNAME, XMLDDL_WRITE_TABSTMT) )
     {
-        createTabStmt = " stmt=\""+GStuff::formatForXml(createTabStmt).removeButOne()+";\"";
+        createTabStmt = " stmt=\""+GStuff::changeToXml(createTabStmt).removeButOne()+";\"";
     }
     else createTabStmt = "";
 
@@ -376,7 +377,7 @@ void ReorgAll::writeView(QFile *outFile, OptionsTab*)
     GString createTabStmt = m_pDSQL->getDdlForView(iFullTabName).removeAll('\n').change('\t', ' ').removeButOne();
     //createTabStmt = linesToSingleLine(createTabStmt).removeButOne().strip();
     createTabStmt = createTabStmt.change(10, ' ').change(13, ' ').change('\t', ' ').removeButOne().strip();
-    createTabStmt = " stmt=\""+ GStuff::formatForXml(createTabStmt)+";\"";
+    createTabStmt = " stmt=\""+ GStuff::changeToXml(createTabStmt)+";\"";
     writeToUtf8File(outFile, "\t<view schema=\""+Helper::tableSchema(iFullTabName, m_pDSQL->getDBType())+"\" name=\""+
                     Helper::tableName(iFullTabName, m_pDSQL->getDBType())+"\""+createTabStmt+ " />");
 }
@@ -444,9 +445,9 @@ void ReorgAll::writeChecks(DSQLPlugin *pDSQL, QFile * outFile, OptionsTab *pOptT
         {
             pDSQL->getHeaderData(j, &tag);
             pDSQL->getRowData(i, j, &value);
-            entry += tag.lowerCase()+"=\""+GStuff::formatForXml(value)+"\" ";
+            entry += tag.lowerCase()+"=\""+GStuff::changeToXml(value)+"\" ";
         }
-        stmt = GStuff::formatForXml(m_pDSQL->getChecks(iFullTabName).removeAll('\n'));
+        stmt = GStuff::changeToXml(m_pDSQL->getChecks(iFullTabName).removeAll('\n'));
         if( writeCreateStmt) entry += " stmt=\""+stmt+"\"";
         entry += "/>";
         writeToUtf8File(outFile, entry);
@@ -574,7 +575,7 @@ void ReorgAll::writeSeqToFile(QFile *outFile, GSeq <GString> *entry, GString tag
         {
             //key = entry->elementAtPosition(i).removeAll('\n');
             key = linesToSingleLine(entry->elementAtPosition(i));
-            writeToUtf8File(outFile, "\t\t\t<"+tag+" stmt=\""+GStuff::formatForXml(key).strip()+"\" />");
+            writeToUtf8File(outFile, "\t\t\t<"+tag+" stmt=\""+GStuff::changeToXml(key).strip()+"\" />");
         }
         writeToUtf8File(outFile, "\t\t</"+tag+"s>");
     }
@@ -610,7 +611,7 @@ GString ReorgAll::formatColumnsInStmt(GString cols, OptionsTab *pOptTab)
     {
         return cols.removeAll('\"');
     }
-    return GStuff::formatForXml(cols);
+    return GStuff::changeToXml(cols);
 }
 
 GString ReorgAll::tableSpace(GString tableName)
@@ -634,7 +635,7 @@ short ReorgAll::fillCreateTabLB()
         GString colName = pmfTable.column(i)->colName();
         addTableItem(0, GString(i));
         addTableItem(1, colName);
-        addTableItem(2, pmfTable.column(i)->colType());
+        addTableItem(2, pmfTable.column(i)->colTypeName());
         addTableItem(3, pmfTable.column(i)->colLength());
         addTableItem(4, pmfTable.column(i)->nullable());
         addTableItem(5, pmfTable.column(i)->defaultVal());
@@ -834,7 +835,7 @@ void ReorgAll::fillColumnsTab()
     {
         addTableItem(0, GString(i));
         addTableItem(1, pmfTable.column(i)->colName());
-        addTableItem(2, pmfTable.column(i)->colType());
+        addTableItem(2, pmfTable.column(i)->colTypeName());
         addTableItem(3, pmfTable.column(i)->colLength());
         addTableItem(4, pmfTable.column(i)->nullable());
         addTableItem(5, pmfTable.column(i)->defaultVal());
@@ -1504,7 +1505,8 @@ void ReorgAll:: delClicked()
             pItem = indexLV->item(pos, 4);
             if( pItem == NULL ) return;
             indexSchema = GString(indexLV->item(pos,1)->text());
-            if( GString(pItem->text()).occurrencesOf("PRIMARY") > 0 ) cmd = "alter table "+formTabName()+" drop constraint "+indexName; //Primary Key
+            //if( GString(pItem->text()).occurrencesOf("PRIMARY") > 0 ) cmd = "alter table "+formTabName()+" drop constraint \""+indexSchema+"\".\""+indexName+"\""; //Primary Key
+            if( GString(pItem->text()).occurrencesOf("PRIMARY") > 0 ) cmd = "alter table "+formTabName()+" drop constraint \""+indexName+"\""; //Primary Key
             else cmd = "drop index \""+indexSchema+"\".\""+indexName+"\""; //"Ordinary" Index
         }
 		else
@@ -2194,7 +2196,7 @@ void ReorgAll::fillColLV()
 #if QT_VERSION >= 0x060000
         pItem = new QTableWidgetItem(QString::fromLocal8Bit(GString(pmfTable.column(i)->colType()).toByteArr()));
 #else
-        pItem = new QTableWidgetItem(QString::fromLocal8Bit(GString(pmfTable.column(i)->colType())));
+        pItem = new QTableWidgetItem(QString::fromLocal8Bit(GString(pmfTable.column(i)->colTypeName())));
 #endif
         dropLV->setItem(i-1, 2, pItem);
         dropLV->setRowHeight(i-1, QFontMetrics( dropLV->font()).height()+5);

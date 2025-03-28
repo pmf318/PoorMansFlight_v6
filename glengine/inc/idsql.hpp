@@ -174,7 +174,8 @@ typedef struct CN_SET{
 
 typedef struct CL_SPC{
     GString ColName;
-    GString ColType;
+    GString ColTypeName;
+    int     ColType;
     GString Length;
     GString Scale;
     GString Nullable;
@@ -184,8 +185,8 @@ typedef struct CL_SPC{
     GString Identity;
     GString Generated;
     GString Misc;
-    void init(){ColName = ""; ColType = ""; Length = ""; Scale = ""; Nullable = ""; Default = "";
-          Logged = ""; Compact = ""; Identity = ""; Generated = ""; Misc = ""; }
+    void init(){ColName = ""; ColTypeName = ""; Length = ""; Scale = ""; Nullable = ""; Default = "";
+          Logged = ""; Compact = ""; Identity = ""; Generated = ""; Misc = ""; ColType = 0;}
 } COL_SPEC;
 
 

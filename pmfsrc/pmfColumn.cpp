@@ -4,6 +4,7 @@
 PmfColumn::PmfColumn(const COL_SPEC * colSpec)
 {
     _colName = colSpec->ColName;
+    _colTypeName = colSpec->ColTypeName;
     _colType = colSpec->ColType;
     _length = colSpec->Length;
     _scale = colSpec->Scale;

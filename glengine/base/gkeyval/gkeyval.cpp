@@ -9,6 +9,7 @@
 #ifndef _GKEYVAL_
 #include "gkeyval.hpp"
 #endif
+#include "gxml.hpp"
 static GString _SEP   = "@PMF_SEP@";
 
 GKeyVal::GKeyVal(int debugMode)
@@ -114,9 +115,10 @@ void GKeyVal::addOrReplace(GString key, GString value)
     if( !this->replaceValue(key, value) ) return;
     this->add(key, value);
 }
-
+/*
 int GKeyVal::toFile(GString fileName)
 {
+    return toXmlFile(fileName);
     GString out;
     GFile f(fileName, GF_OVERWRITE);
     if( !f.initOK() ) return 1;
@@ -128,9 +130,10 @@ int GKeyVal::toFile(GString fileName)
     }
     return 0;
 }
-
+*/
 int GKeyVal::readFromFile(GString fileName)
 {
+    return readFromXmlFile(fileName);
     GFile f;
     GString key, val, line;
     _keyValSeq.deleteAll();
@@ -149,3 +152,68 @@ int GKeyVal::readFromFile(GString fileName)
 	return 0;
 }
 
+
+int GKeyVal::saveAsXml(GString fileName)
+{
+    GXml keyValXml;
+    GXmlNode * rootNode = keyValXml.getRootNode();
+    GXmlNode * pTopNode = rootNode->addNode("KeyValSettings");
+    GString key, val;
+    for(int i = 1; i <= (int)_keyValSeq.numberOfElements(); ++ i)
+    {
+        key = _keyValSeq.elementAtPosition(i)->key;
+        val = _keyValSeq.elementAtPosition(i)->val;
+        GXmlNode * pNode = pTopNode->addNode("data");
+        pNode->addAttribute("key", key);
+        pNode->addAttribute("val", val);
+    }
+    GFile f( fileName, GF_OVERWRITE );
+    if( f.initOK() )    {
+        f.addLine(keyValXml.toString());
+        return 0;
+    }
+    return 1;
+}
+/*
+int GKeyVal::toXmlFile(GString fileName)
+{
+    return saveAsXml(fileName);
+    GString out,  key, val;
+    GFile f(fileName, GF_OVERWRITE);
+    if( !f.initOK() ) return 1;
+
+    f.addLine("<KeyValSettings>");
+    for(int i = 1; i <= _keyValSeq.numberOfElements(); ++i )
+    {
+        key = _keyValSeq.elementAtPosition(i)->key;
+        val = _keyValSeq.elementAtPosition(i)->val;
+        key = key.change("<", "&lt;").change(">", "&gt;");
+        val = val.change("<", "&lt;").change(">", "&gt;");
+        printf("toXmlFile, key: %s, out: %s\n", (char*)_keyValSeq.elementAtPosition(i)->key, (char*) key);
+        printf("toXmlFile, val: %s, out: %s\n", (char*)_keyValSeq.elementAtPosition(i)->val, (char*) val);
+        out = "<data key=\""+ key +"\" val=\""+val+"\" />";
+        f.addLine(out);
+    }
+    f.addLine("</KeyValSettings>");
+    return 0;
+}
+*/
+int GKeyVal::readFromXmlFile(GString fileName)
+{
+    GXml fXml;
+    GString key, val;
+    int erc = fXml.readFromFile(fileName);
+    if( erc ) return erc;
+
+    _keyValSeq.deleteAll();
+    GXml outXml = fXml.getBlocksFromXPath("/KeyValSettings/data");
+    int count = outXml.countBlocks("data");
+    for(int i=1; i <= count; ++i )
+    {
+        GXml inner = outXml.getBlockAtPosition("data", i);
+        key = inner.getAttribute("key").change("&lt;", "<").change("&gt;", ">");
+        val = inner.getAttribute("val").change("&lt;", "<").change("&gt;", ">");
+        this->add(key, val);
+    }
+    return 0;
+}

@@ -314,6 +314,7 @@ GString postgres::reconnect(CON_SET *pCS)
     m_strLastError = PQerrorMessage(m_pgConn);
     //int sqlCode = PQresultErrorField(m_pRes, PG_DIAG_SQLSTATE);
     printf("ConnCount: %i\n", m_postgresConnectionCounter);
+    this->setEncoding(m_strEncoding);
     return "";
 
 }
@@ -419,7 +420,7 @@ GString postgres::initAllInternal(GString message, long maxRows,  int getLen, in
             else if( isNumType(j+1) ) data = PQgetvalue(m_pRes, i, j);
             else if( sqlType(j+1) == BOOL_PMF )
             {
-                data = GString(PQgetvalue(m_pRes, 0, j)).strip("'");
+                data = GString(PQgetvalue(m_pRes, i, j)).strip("'");
                 data = data == "t" ? "'true'" : "'false'";
             }
             else data = "'"+GString(PQgetvalue(m_pRes, i, j))+"'";
@@ -465,7 +466,6 @@ int postgres::tryFastCursor(GString sqlCmd)
         return 0;
     }
     m_pRes = PQexec(m_pgConn, "END");
-
 
     m_pRes = PQexec(m_pgConn, "BEGIN");    
     tryCmd = "DECLARE myCRS CURSOR FOR "+sqlCmd;
@@ -620,9 +620,10 @@ GString postgres::initAllCrs(GString message, long maxRows,  int getLen)
         for (int j = 0; j < m_iNumberOfColumns; j++)
         {
 
-            if( PQgetisnull(m_pRes, 0, j) )data = "NULL";
+            if( PQgetisnull(m_pRes, 0, j) ) data = "NULL";
             else if( sqlType(j+1) == BYTEA_PMF ) data = "@DSQL@BLOB";
             else if( sqlType(j+1) == TEXT_PMF && !m_iReadClobData ) data = "@DSQL@CLOB";
+            //else if( isXMLCol(j+1) ) data = "@DSQL@XML";
             else if( isNumType(j+1) ) data = PQgetvalue(m_pRes, 0, j);
             else if( sqlType(j+1) == BOOL_PMF )
             {
@@ -894,7 +895,7 @@ int postgres::isNumType(int pos)
         case FLOAT4_PMF:
         case FLOAT8_PMF:
         case INT4ARRAY_PMF:
-    case NUMERIC_PMF:
+        case NUMERIC_PMF:
             return 1;
     }
     return 0;
@@ -1387,6 +1388,8 @@ GString postgres::exportCsvBytea(GKeyVal *pKeyVal)
         for (int j = 0; j < colCount; j++)
         {
             deb("::exportByteArrayToFile, fetching. Col: "+GString(j));
+            data = GString(PQgetvalue(m_pRes, 0, j)).strip("'");
+
             if( PQgetisnull(m_pRes, i, j) )data = "NULL";
             else if( isNumType(j+1) ) data = PQgetvalue(m_pRes, i, j);
             else if ( isXMLCol(j+1) && xmlAsFile == 0 )
@@ -1526,7 +1529,7 @@ GString postgres::descriptorToFile( GString cmd, GString &blobFile, int * outSiz
     GString colName = cleanString(cmdSeq.elementAtPosition(2));
     if( colName == "*" ) return "Invalid column";
 
-    //1. translete colName
+    //1. translate colName
     GString encCol = colName;
     if( sqlType(colName) == PSTGRS_BYTEA ) encCol = "translate(encode("+colName+",'base64'), E'\n', '')";
     if( sqlType(colName) == PSTGRS_XML )   encCol = "cast("+colName+" as text)";
@@ -1549,9 +1552,13 @@ GString postgres::descriptorToFile( GString cmd, GString &blobFile, int * outSiz
     //if( sqlType(colName) == PSTGRS_BYTEA ) cmd = cmd.change(colName, "encode("+colName+",'escape')");
     */
 
-    //GString err = ps.initAllInternal(cmd, -1, 0, 0);
     deb("::descriptorToFile: translated cmd: "+cmd);
-    GString err = ps.initAllInternal(cmd, -1, 0, 1);
+    ps.setCLOBReader(1);
+    //GString err = ps.initAllInternal(cmd, -1, 0, 1);
+    GString err = ps.initAllCrs(cmd, -1, 0);
+
+
+    ps.setCLOBReader(0);
     if( ps.numberOfColumns() > 1 ) return "Invalid result (colCount > 1) for  '"+cmd+"'";
     if( err.length() ) return err;
     if( ps.numberOfRows() == 0 ) return "Apparently table contents have changed.";
@@ -1573,7 +1580,7 @@ GString postgres::descriptorToFile( GString cmd, GString &blobFile, int * outSiz
     //If data was fetched as base64, use this:
     FILE * f;
     f = fopen(blobFile, "wb");
-    deb("::descriptorToFile: col: "+colName+", sqltype: "+GString(sqlType(colName)));
+    deb("::descriptorToFile: col: "+colName+", sqltype: "+GString(sqlType(colName))+", dataFile: "+blobFile);
     if( sqlType(colName) == PSTGRS_BYTEA )
     {
         deb("::descriptorToFile: have BYTEA");
@@ -1581,9 +1588,10 @@ GString postgres::descriptorToFile( GString cmd, GString &blobFile, int * outSiz
         *outSize = fwrite((char*) ret.c_str(),1,ret.size(),f);
     }
     else *outSize = fwrite((char*) raw, 1, raw.length(), f);
-    //printf("Raw: %s<--\n", (char*) raw);
+    printf("Raw: %s<--\n", (char*) raw);
     fclose(f);
-
+    err = sqlError();
+    if( err.occurrencesOf("22p05") && *outSize > 0 ) return "";
     return sqlError();
 }
 
@@ -1711,6 +1719,9 @@ int postgres::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
     GString tabName   = this->tabName(table, 1);
     COL_SPEC *cSpec;
 
+    postgres tmpSql(*this);
+    tmpSql.initAll("select * from "+table, 0);
+
     this->setCLOBReader(1); //This will read any CLOB into fieldData
 
     GString cmd = "SELECT column_name, data_type, character_maximum_length, numeric_precision, numeric_scale, is_nullable, column_default, is_identity, "
@@ -1722,39 +1733,41 @@ int postgres::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
 
 
 
-
+    printf("Table: %s\n", (char*) table);
     for( unsigned i=1; i<=this->numberOfRows(); ++i )
     {
         cSpec = new COL_SPEC;
         cSpec->init();
 
         cSpec->ColName = this->rowElement(i,1).strip("'");
+        cSpec->ColType = tmpSql.sqlType(cSpec->ColName);
+        printf(" colName: %s, colTpe: %i\n", (char*) cSpec->ColName, cSpec->ColType);
 
         /* colType CHARACTER (from syscat.tables) needs to be truncated to CHAR */
-        cSpec->ColType = this->rowElement(i,2).strip("'");
-        if( cSpec->ColType == "CHARACTER" ) cSpec->ColType = "CHAR";
+        cSpec->ColTypeName = this->rowElement(i,2).strip("'");
+        if( cSpec->ColTypeName == "CHARACTER" ) cSpec->ColTypeName = "CHAR";
 
 
         /* SMALLINT, INTEGER, BIGINT, DOUBLE */
-        if( cSpec->ColType.occurrencesOf("int") > 0 ||
-                cSpec->ColType.occurrencesOf("double") > 0 ||
-                cSpec->ColType.occurrencesOf("float") > 0 ||
-                cSpec->ColType.occurrencesOf("date") > 0 ||
-                cSpec->ColType.occurrencesOf("serial") > 0 ||
-                cSpec->ColType.occurrencesOf("box") > 0 ||
-                cSpec->ColType.occurrencesOf("boolean") > 0 ||
-                cSpec->ColType.occurrencesOf("json") > 0 ||
-                cSpec->ColType.occurrencesOf("line") > 0 ||
-                cSpec->ColType.occurrencesOf("time"))
+        if( cSpec->ColTypeName.occurrencesOf("int") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("double") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("float") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("date") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("serial") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("box") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("boolean") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("json") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("line") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("time"))
         {
             cSpec->Length = "N/A";
         }
         /* DECIMAL: (LENGTH, SCALE) */
-        else if( cSpec->ColType.occurrencesOf("decimal") || cSpec->ColType.occurrencesOf("numeric") )
+        else if( cSpec->ColTypeName.occurrencesOf("decimal") || cSpec->ColTypeName.occurrencesOf("numeric") )
         {
             cSpec->Length = this->rowElement(i,4)+", "+this->rowElement(i,5);
         }
-        else if( cSpec->ColType.occurrencesOf("xml") || cSpec->ColType.occurrencesOf("bytea") )
+        else if( cSpec->ColTypeName.occurrencesOf("xml") || cSpec->ColTypeName.occurrencesOf("bytea") )
         {
             cSpec->Length = "N/A";
         }
@@ -1911,8 +1924,11 @@ GSeq <IDX_INFO*> postgres::getIndexeInfo(GString table)
 
 void postgres::getIndexInfo(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tableName)
 {
+    setCLOBReader(1);
+    //GString err = this->initAllInternal(cmd, -1, 0, 1);
+    GString err = this->initAllCrs(cmd, -1, 0);
+    setCLOBReader(0);
 
-    GString err = this->initAllInternal(cmd, -1, 0, 1);
     deb("::getIndexInfo, cmd: "+cmd);
     deb("::getIndexeInfo, err: "+err);
     deb("::getIndexInfo, found: "+GString(this->numberOfRows()));
@@ -1956,11 +1972,12 @@ void postgres::getIndexInfo(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tab
 
 void postgres::getIndexInfoExtended(GString cmd, GSeq <IDX_INFO*> *indexSeq, GString tableName)
 {
-
-    GString err = this->initAllInternal(cmd, -1, 0, 1);
-    deb("::getIndexInfo, cmd: "+cmd);
-    deb("::getIndexeInfo, err: "+err);
-    deb("::getIndexInfo, found: "+GString(this->numberOfRows()));
+    setCLOBReader(1);
+    GString err = this->initAllCrs(cmd, -1, 0);
+    setCLOBReader(0);
+    deb("::getIndexInfoExtended, cmd: "+cmd);
+    deb("::getIndexInfoExtended, err: "+err);
+    deb("::getIndexInfoExtended, found: "+GString(this->numberOfRows()));
 
     GString indName = "";
     IDX_INFO * pIdx;
@@ -1980,8 +1997,14 @@ void postgres::getIndexInfoExtended(GString cmd, GSeq <IDX_INFO*> *indexSeq, GSt
         GString col5 = this->rowElement(i, 5).strip("'");
         GString col4 = this->rowElement(i, 4).strip("'");
 
-        if( this->rowElement(i, 5).strip("'") == GString("true") || this->rowElement(i, 5).strip("'") == "t") pIdx->Type = DEF_IDX_PRIM;
-        else if( this->rowElement(i, 4).strip("'") == GString("true") || this->rowElement(i, 4).strip("'") == "t") pIdx->Type = DEF_IDX_UNQ;
+        if( this->rowElement(i, 5).strip("'") == GString("true") || this->rowElement(i, 5).strip("'") == "t")
+        {
+            pIdx->Type = DEF_IDX_PRIM;
+        }
+        else if( this->rowElement(i, 4).strip("'") == GString("true") || this->rowElement(i, 4).strip("'") == "t")
+        {
+            pIdx->Type = DEF_IDX_UNQ;
+        }
         else pIdx->Type = DEF_IDX_DUPL;
 
         pIdx->Columns = this->rowElement(i, 9).strip("'").strip('{').strip('}').change("\\\"", "");
@@ -2565,7 +2588,8 @@ int postgres::deleteViaFetch(GString tableName, GSeq<GString> * colSeq, int rowC
         cmd += addQuotes(colSeq->elementAtPosition(i))+",";
     }
     cmd = cmd.stripTrailing(",");
-    cmd += " from "+tableName+ " limit 2000)";
+    if( whereClause.length() ) cmd += " from "+tableName+" WHERE "+whereClause+" limit 2000)";
+    else cmd += " from "+tableName+" limit 2000)";
     GString err = this->initAll(cmd);
     deb("deleteViaFetch: cmd: "+cmd+"\nErr: "+err);
     if( err.length() ) return sqlCode();

@@ -94,11 +94,16 @@ static GString basePath(GString subDir = "", int useLocalCfg = 0)
     GString flagFile = GString(QDir::currentPath())+pathSep+_LOCAL_CFG_FLAG;
     QFileInfo fileInfo(flagFile);
 
-    GString cfgRoot;
+    GString cfgRoot, path;
     if( fileInfo.exists() && useLocalCfg ) cfgRoot = QDir::currentPath();
     else cfgRoot = QDir::homePath();
-    GString path = cfgRoot+pathSep+_CFG_DIR+pathSep;
+#ifdef MAKE_VC
+    path = cfgRoot+pathSep+_CFG_DIR+pathSep;
+#else
+    path = cfgRoot+pathSep+"."+_CFG_DIR+pathSep;
+#endif
     if( subDir.length() ) path += subDir+pathSep;
+
     QDir().mkpath(path);
     return path;
 }

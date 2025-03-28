@@ -61,7 +61,7 @@ MAKEFILE = Makefile
 OBJECTS_DIR=./obj
 MOC_DIR=./obj
 
-
+CONFIG+=debug
 CONFIG += qt
 SOURCES += test.cpp
 #SOURCES += utf8.c

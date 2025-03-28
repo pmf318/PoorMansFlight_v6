@@ -48,6 +48,7 @@ protected slots:
 	//    virtual void fillTableLB(GSeq <GString> * tableNameSeq);
 	virtual void okClicked();
     virtual void cancelClicked();
+    virtual void copyToClipboard();
     void listDoubleClicked(QListWidgetItem*);
 
 
@@ -59,6 +60,7 @@ protected:
 	QRadioButton* valueRB;
 	QPushButton* okB;
 	QPushButton* cancelB;
+    QPushButton* copyToClipboardB;
 	QListWidget* resultLB;
 	QButtonGroup * bGroup;
 };

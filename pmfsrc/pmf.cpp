@@ -58,6 +58,7 @@
 #include "pmfTable.h"
 #include "selectEncoding.h"
 #include "newConn.h"
+#include "selectEncoding.h"
 
 
 #include "QResource"
@@ -260,7 +261,7 @@ void Pmf::reconnectTimerEvent()
         TabEdit * pTE = (TabEdit*) pWdgt;
         pTE->setReconnInfo(info);
     }
-    //reconnectInfoLE->setText(info);
+    reconnectInfoLE->setText(info);
     if( timerCount >= 60*m_iReconnectWaitTime)
     {
         deb("Init reconnect...");
@@ -415,7 +416,7 @@ QMenu * Pmf::createStyleMenu()
 #ifdef MAKE_VC
         if( GString(styleName).lowerCase() == "windowsvista" )
         {
-            continue;
+//            continue;
         }
 #endif
         pLightAction = new QAction(styleName, this);
@@ -440,7 +441,7 @@ QMenu * Pmf::createStyleMenu()
     for (int i = 0; i < styles.size(); ++i)
     {
         styleName = (styles.at(i).toLocal8Bit()).data();
-        if( GString(styleName).lowerCase() != "fusion"  && GString(styleName).lowerCase() != "windows" ) continue;
+        //if( GString(styleName).lowerCase() != "fusion"  && GString(styleName).lowerCase() != "windows" ) continue;
 
         pDarkAction = new QAction(styleName + _DARK_THEME, this);
         pDarkAction->setCheckable(true);
@@ -1157,7 +1158,7 @@ int Pmf::loginClicked()
     {
         timerCount = 0;
         reconnectTimer->start( 1000 );
-        //reconnectInfoBox->show();
+        reconnectInfoBox->show();
     }
     //VersionCheck
     versionCheckTimer = new QTimer( this );
@@ -1686,11 +1687,15 @@ GString Pmf::restoreFileName(int checkForOldFiles )
     QString home = QDir::homePath ();
     if( !home.length() ) return "";
     GString path;
+
+    path = basePath() + _RESTORE_FILE;
+    /*
 #if defined(MAKE_VC) || defined (__MINGW32__)
     path = GString(home)+"\\"+_CFG_DIR+"\\"+_RESTORE_FILE;
 #else
     path = GString(home)+"/."+_CFG_DIR + "/"+_RESTORE_FILE;
 #endif
+*/
 
     if( checkForOldFiles == 1 )
     {
@@ -2037,6 +2042,8 @@ void Pmf::refreshTabOrder()
 
 void Pmf::checkMigration()
 {
+    SelectEncoding::convertToXml();
+
     GString home = GString(QDir::homePath());
     GString oldSettings;
     GString newSettings;
@@ -2056,6 +2063,8 @@ void Pmf::checkMigration()
     if( QMessageBox::question(this, "PMF", msg, QMessageBox::Yes, QMessageBox::No) != QMessageBox::Yes ) return;
 
     rename(oldSettings, newSettings);
+
+
 }
 void Pmf::addToHostVarSeq(GSeq <GString> * pSeq)
 {

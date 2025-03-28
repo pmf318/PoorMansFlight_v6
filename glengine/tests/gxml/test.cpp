@@ -4,6 +4,7 @@
 #include <gstuff.hpp>
 #include <gsocket.hpp>
 #include <gxml.hpp>
+#include <gfile.hpp>
 
 #include <QString>
 
@@ -34,15 +35,25 @@ char consInput[1000];
 void deb(char * msg);
 void formatXml(GString file);
 void formatXmlFromString(GString in);
+void createXml();
+void fillXml();
+void updateXml();
+
 
 int main(int argv, char **args)
 {
+
+    createXml();
+    fillXml();
+    updateXml();
+    //return 0;
+
 //    formatXml("db2.xml");
 //    return 0;
 
     printf("Start\n");
     formatXmlFromString("");
-    return 0;
+    //return 0;
     GXml xml;
     xml.readFromFile("test.xml");
     GXmlNode *pRoot = xml.getRootNode();
@@ -83,7 +94,7 @@ int main(int argv, char **args)
     aNode.addAttribute(&attr);
 
     pNode = xml.getRootNode();
-    pNode->addChildNode(&aNode);
+    pNode->addNode(&aNode);
     deb("PostAdd: "+GString(pNode->childCount()));
     deb("--------------------------------");
     deb(pNode->toString());
@@ -91,6 +102,65 @@ int main(int argv, char **args)
 
     return 0;
 }
+
+void updateXml()
+{
+    GXml gXml;
+    gXml.readFromFile("someTest.xml");
+
+    GXmlNode *encNodes = gXml.nodeFromXPath("/Encodings");
+    GXmlNode *encNode;
+    if( encNodes == NULL ) return;
+
+    encNode = encNodes->addNode("Enc");
+    encNode->addAttribute("pos", "Added");
+    encNode->addAttribute("host", "bla");
+    GFile f( "someTest.xml", GF_OVERWRITE );
+    if( f.initOK() )    {
+        f.addLine(gXml.toString());
+    }
+}
+
+void fillXml()
+{
+    createXml();
+    GXml gXml;
+    gXml.readFromFile("someTest.xml");
+
+
+    GXmlNode *encNodes = gXml.nodeFromXPath("/Encodings");
+    GXmlNode *encNode;
+    if( encNodes == NULL ) return;
+
+    for(int i=1; i <= 2; ++i )
+    {
+        encNode = encNodes->addNode("Enc");
+        encNode->addAttribute("pos", GString(i));
+        encNode->addAttribute("host", "bla");
+    }
+    GFile f( "someTest2.xml", GF_OVERWRITE );
+    if( f.initOK() )    {
+        f.addLine(gXml.toString());
+    }
+}
+
+void createXml()
+{
+    remove("someTest.xml");
+    GFile f("someTest.xml");
+    if( f.initOK() ) return;
+
+    GXml gXml;
+    gXml.create();
+    GXmlNode * rootNode = gXml.getRootNode();
+    rootNode->addNode("Encodings");
+
+    GFile out( "someTest.xml", GF_OVERWRITE );
+    if( out.initOK() )    {
+        out.addLine(gXml.toString());
+    }
+}
+
 void formatXmlFromString(GString fileName)
 {
     GXml xml;

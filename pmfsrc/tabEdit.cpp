@@ -4829,12 +4829,15 @@ GString TabEdit::histFileName()
 
 
     GString db = GString(dbNamePB->text()).strip();
-    GString out;
+    GString out = basePath() + _HST_FILE;
+
+/*
 #ifdef MAKE_VC
     out = GString(home)+"\\"+_CFG_DIR+"\\"+_HST_FILE;
 #else
     out = GString(home)+"/."+_CFG_DIR + "/"+_HST_FILE;
 #endif
+*/
     QFile f(out+"_"+db);
     if( !f.exists() ) QFile::copy(out, out+"_"+db);
     f.close();

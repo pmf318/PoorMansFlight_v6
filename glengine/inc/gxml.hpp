@@ -60,16 +60,20 @@ public:
     GXmlNode * child(GString tagName);
     GXmlNode * parent();
     GXmlNode * nodeFromXPath(GString xpath);
+    GXmlNode * addNode(GString tagName);
     int inComment();
-    void addChildNode(GXmlNode * pNode);
+    void addNode(GXmlNode * pNode);
     void addAttribute(GXML_ATTR* xmlAttr);
+    void addAttribute(GString key, GString value);
+    void setAttributeSeq(GSeq<GXML_ATTR> seq);
+    int setAttributeValue(GString attr, GString val);
+
     void setTagName(GString tagName);
     GString toString();
 
 private:
     void setFullPath(GString path);        
     void setInComment(int inComment){ _inComment = inComment; }
-    void setAttributeSeq(GSeq<GXML_ATTR> seq);
     void setAttributeSeq();
     void setNodeValue(GString value);
     GString internal_toString(int indentCount);
@@ -98,6 +102,9 @@ public:
     GXml(GString xmlAsString);
     GXml( const GXml &x );
     ~GXml();
+
+    void create();
+    int isValid(GString fileName);
     int readFromFile(GString fileName);
     int lastErrCode();
     GString toString();
@@ -108,6 +115,7 @@ public:
 
     int attributeCount();
     GString getAttribute(GString name);
+    //void addAttribute(GString key, GString val);
     int isInComment();
 
     GXmlNode *getRootNode();
@@ -128,7 +136,6 @@ private:
     void setIsInComment(int start, int end);
     void deb(GString in);
     GString _xmlAsString;
-    GString _xmlFullSource;
     int _lastErrCode;
     int _isInComment;
     GSeq <GXml> _blockSeq;

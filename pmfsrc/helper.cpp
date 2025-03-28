@@ -499,23 +499,38 @@ GString Helper::createSearchConstraint(DSQLPlugin * pDSQL, GSeq<COL_SPEC*> *colD
         else val = " = "+Helper::formatForHex(pDSQL, "'"+val+"'");
     }
     else if( val == "NULL") val = " IS NULL";
-    else if( pDSQL->isNumType(col) && pDSQL->getDBType() != SQLSERVER)
+    else if( pDSQL->isNumType(col) && pDSQL->getDBType() == SQLSERVER)
+    {
+        if( exactMatch) val = " = '"+val+"'";
+        else  val = " LIKE '%"+val+"%'";
+        modifier1 = " CAST ";
+        modifier2 = " as NVARCHAR";
+    }
+    else if( pDSQL->isNumType(col) && pDSQL->getDBType() == POSTGRES)
+    {
+        if( exactMatch) val = " = '"+val+"'";
+        else  val = " LIKE '%"+val.upperCase()+"%'";
+        modifier1 = " CAST ";
+        modifier2 = " as VARCHAR";
+    }
+    else if( pDSQL->isNumType(col) )
     {
         modifier1 = "CHAR";
         if( exactMatch) val = "="+val.upperCase();
         //else val = " LIKE '%"+val.upperCase()+"%'";
         else val = " LIKE upper('%"+val+"%')";
     }
-    else if( pDSQL->isNumType(col) && pDSQL->getDBType() == SQLSERVER)
+//    else if( GString(val).upperCase() == "CURRENT TIMESTAMP" || GString(val).upperCase() == "CURRENT DATE" ||
+//             GString(val).upperCase() == "CURRENT_TIMESTAMP" || GString(val).upperCase() == "CURRENT_DATE")
+//    {
+//        val = "=" + val;
+//    }
+    else if( pDSQL->isDateTime(col) )
     {
         if( exactMatch) val = " = '"+val+"'";
-        else  val = " LIKE '%"+val.upperCase()+"%'";
+        else  val = " LIKE '%"+val+"%'";
         modifier1 = " CAST ";
-        modifier2 = " as NVARCHAR";
-    }
-    else if( GString(val).upperCase() == "CURRENT TIMESTAMP" || GString(val).upperCase() == "CURRENT DATE" )
-    {
-        val = "=" + val;
+        modifier2 = " as VARCHAR";
     }
     else if( GString(val).upperCase() == "GETDATE()" )
     {

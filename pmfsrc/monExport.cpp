@@ -142,7 +142,7 @@ int MonExport::insertIntoTable(int row, PmfTable * table)
     {
         val = m_pTabWdgt->item(row, i)->text();
 
-        if( table->column(i+1)->colType() == "VARCHAR" )
+        if( table->column(i+1)->colTypeName() == "VARCHAR" )
         {
             val = "'"+val+"'";
             m_pDSQL->convToSQL(val);
@@ -203,7 +203,7 @@ void MonExport::exportAsXml(GString fileName)
             col  = m_pTabWdgt->horizontalHeaderItem(j)->text();
             col = col.removeAll(' ').removeAll(')').removeAll('(').change("/", "Per");
             data = m_pTabWdgt->item(i, j)->text();
-            out += col+"=\""+GStuff::formatForXml(data).removeButOne()+"\" ";
+            out += col+"=\""+GStuff::changeToXml(data).removeButOne()+"\" ";
         }
         out += "/>";
         writeToUtf8File(outFile, out);
@@ -305,7 +305,7 @@ int MonExport::exportToXml()
             col  = m_pTabWdgt->horizontalHeaderItem(j)->text();
             col = col.removeAll(' ').removeAll(')').removeAll('(').change("/", "Per");
             data = m_pTabWdgt->item(i, j)->text();
-            out += col+"=\""+GStuff::formatForXml(data).removeButOne()+"\" ";
+            out += col+"=\""+GStuff::changeToXml(data).removeButOne()+"\" ";
         }
         out += "/>";
         writeToUtf8File(outFile, out);

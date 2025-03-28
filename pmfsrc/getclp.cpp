@@ -241,9 +241,9 @@ void Getclp::writeChecks(DSQLPlugin *pDSQL, QFile * outFile, OptionsTab *pOptTab
         {
             pDSQL->getHeaderData(j, &tag);
             pDSQL->getRowData(i, j, &value);
-            entry += tag.lowerCase()+"=\""+GStuff::formatForXml(value)+"\" ";
+            entry += tag.lowerCase()+"=\""+GStuff::changeToXml(value)+"\" ";
         }
-        stmt = GStuff::formatForXml(m_pDSQL->getChecks(iTableName).removeAll('\n'));
+        stmt = GStuff::changeToXml(m_pDSQL->getChecks(iTableName).removeAll('\n'));
         if( writeCreateStmt) entry += " stmt=\""+stmt+"\"";
         entry += "/>";
         writeToUtf8File(outFile, entry);
@@ -258,7 +258,7 @@ GString Getclp::formatColumnsInStmt(GString cols, OptionsTab *pOptTab)
     {
         return cols.removeAll('\"');
     }
-    return GStuff::formatForXml(cols);
+    return GStuff::changeToXml(cols);
 }
 
 void Getclp::writeForKeyInfo(GSeq <IDX_INFO*> * idxSeq, QFile * outFile, OptionsTab *pOptTab)
@@ -421,6 +421,7 @@ void Getclp::writeColumns( QFile *outFile)
         for( int j = 0; j < tabWdgt->columnCount(); ++j )
         {
             data = tabWdgt->item(i,j)->text();
+            data = GStuff::changeToXml(data);
             column = tabWdgt->horizontalHeaderItem(j)->text().toLower();
             if( GString(column).upperCase() == "NULLABLE")
             {
@@ -576,7 +577,7 @@ void Getclp::writeMQT(QFile *outFile, OptionsTab* pOptTab)
 
     if( pOptTab->getCheckBoxValue(XMLDDL_GROUPNAME, XMLDDL_WRITE_TABSTMT) )
     {
-        createTabStmt = " stmt=\""+GStuff::formatForXml(createTabStmt).removeButOne()+";\"";
+        createTabStmt = " stmt=\""+GStuff::changeToXml(createTabStmt).removeButOne()+";\"";
     }
     else createTabStmt = "";
 
@@ -593,7 +594,7 @@ void Getclp::writeView(QFile *outFile, OptionsTab*)
     GString createTabStmt = m_pDSQL->getDdlForView(iTableName).removeAll('\n').removeButOne();
     //createTabStmt = linesToSingleLine(createTabStmt).removeButOne().strip();
     createTabStmt = createTabStmt.change(10, ' ').change(13, ' ').change('\t', ' ').removeButOne().strip();
-    createTabStmt = " stmt=\""+ GStuff::formatForXml(createTabStmt)+";\"";
+    createTabStmt = " stmt=\""+ GStuff::changeToXml(createTabStmt)+";\"";
     writeToUtf8File(outFile, "\t<view schema=\""+Helper::tableSchema(iTableName, m_pDSQL->getDBType())+"\" name=\""+
                     Helper::tableName(iTableName, m_pDSQL->getDBType())+"\""+createTabStmt+ " />");
 }
@@ -613,7 +614,7 @@ void Getclp::writeTable(QFile *outFile, OptionsTab* pOptTab)
 
     if( pOptTab->getCheckBoxValue(XMLDDL_GROUPNAME, XMLDDL_WRITE_TABSTMT) )
     {
-        createTabStmt = " stmt=\""+GStuff::formatForXml(createTabStmt).removeButOne()+";\"";
+        createTabStmt = " stmt=\""+GStuff::changeToXml(createTabStmt).removeButOne()+";\"";
     }
     else createTabStmt = "";
 
@@ -661,7 +662,7 @@ void Getclp::writeSeqToFile(QFile *outFile, GSeq <GString> *entry, GString tag)
         {
             //key = entry->elementAtPosition(i).removeAll('\n');
             key = linesToSingleLine(entry->elementAtPosition(i));
-            writeToUtf8File(outFile, "\t\t\t<"+tag+" stmt=\""+GStuff::formatForXml(key).strip()+"\" />");
+            writeToUtf8File(outFile, "\t\t\t<"+tag+" stmt=\""+GStuff::changeToXml(key).strip()+"\" />");
         }
         writeToUtf8File(outFile, "\t\t</"+tag+"s>");
     }
@@ -694,7 +695,7 @@ short Getclp::fillLB()
     {
         addTableItem(0, GString(i));
         addTableItem(1, pmfTable.column(i)->colName());
-        addTableItem(2, pmfTable.column(i)->colType());
+        addTableItem(2, pmfTable.column(i)->colTypeName());
         addTableItem(3, pmfTable.column(i)->colLength());
         addTableItem(4, pmfTable.column(i)->nullable());
         addTableItem(5, pmfTable.column(i)->defaultVal());

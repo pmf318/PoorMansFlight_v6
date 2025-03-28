@@ -5,6 +5,8 @@
 
 #include "gstuff.hpp"
 #include "gdebug.hpp"
+#include "gfile.hpp"
+
 
 #include <iostream>
 #include <ctype.h>
@@ -20,14 +22,15 @@
 **************************************************************************/
 
 GXmlNode::GXmlNode()
-{
+{    
     _parent = NULL;
     _inComment = 0;
 }
 
 GXmlNode::GXmlNode( GXmlNode * parent )
 {
-    _parent = parent; _inComment = 0;
+    _parent = parent;
+    _inComment = 0;
 }
 
 GXmlNode::~GXmlNode()
@@ -52,9 +55,38 @@ GXmlNode &GXmlNode::operator = (const GXmlNode)
        return *this;
 }
 
+void GXmlNode::addNode(GXmlNode * pNode)
+{
+    pNode->_parent = this;
+    _childSeq.add(pNode);
+}
+
+GXmlNode * GXmlNode::addNode(GString tagName)
+{
+    printf("adNode to childSeq, adding %s<-\n", (char*) tagName);
+    GXmlNode* pNode = new GXmlNode();
+    pNode->_tagName = tagName;
+    pNode->_parent = this;
+    this->_childSeq.add(pNode);
+    return pNode;
+}
+
 void GXmlNode::setNodeValue(GString value)
 {
     _nodeValue = value;
+}
+
+int GXmlNode::setAttributeValue(GString attr, GString val)
+{
+    for(int i = 1; i <= _attrSeq.numberOfElements(); ++i )
+    {
+        if( _attrSeq.elementAtPosition(i)->Name )
+        {
+            _attrSeq.elementAtPosition(i)->Value = val;
+            return 0;
+        }
+    }
+    return 1;
 }
 
 void GXmlNode::setAttributeSeq(GSeq<GXML_ATTR> seq)
@@ -68,14 +100,19 @@ void GXmlNode::setAttributeSeq(GSeq<GXML_ATTR> seq)
     }
 }
 
-
 void GXmlNode::addAttribute(GXML_ATTR* xmlAttr)
+{    
+    addAttribute(xmlAttr->Name, xmlAttr->Value);
+}
+
+void GXmlNode::addAttribute(GString key, GString value)
 {
     GXML_ATTR* pAttr = new GXML_ATTR;
-    pAttr->Name = xmlAttr->Name;
-    pAttr->Value = xmlAttr->Value;
+    pAttr->Name = key;
+    pAttr->Value = GStuff::changeToXml(value);
     _attrSeq.add(pAttr);
 }
+
 
 int GXmlNode::attributeCount()
 {
@@ -90,7 +127,10 @@ GString GXmlNode::getAttributeValue(GString name)
 {
     for( int i = 1; i <= _attrSeq.numberOfElements(); ++i )
     {
-        if( _attrSeq.elementAtPosition(i)->Name == name )return _attrSeq.elementAtPosition(i)->Value;
+        if( _attrSeq.elementAtPosition(i)->Name == name )
+        {
+            return GStuff::changeFromXml(_attrSeq.elementAtPosition(i)->Value);
+        }
     }
     return "";
 }
@@ -114,11 +154,6 @@ void GXmlNode::setFullPath(GString path)
 GString GXmlNode::fullPath()
 {
     return _fullPath;
-}
-
-void GXmlNode::addChildNode(GXmlNode * pNode)
-{
-    _childSeq.add(pNode);
 }
 
 int GXmlNode::childCount()
@@ -151,9 +186,51 @@ int GXmlNode::inComment()
     return _inComment;
 }
 
+GString GXmlNode::toString()
+{
+    return internal_toString(0);
+}
+
+GString GXmlNode::internal_toString(int indentCount)
+{
+    GString indent;
+    GString out;
+    GString attrString;
+    printf("internal_toString, node: %s<-\n", (char*) this->_tagName);
+    if( _tagName.strip().length() == 0 && _nodeValue.length() )
+    {
+        return _nodeValue;
+    }
+    if( _tagName.strip().length() > 0 )
+    {
+        for(int i = 0; i < indentCount; ++i ) indent += "   ";
+        out += indent+"<"+_tagName;
+        for(int i = 1; i <= _attrSeq.numberOfElements(); ++i )
+        {
+            GXML_ATTR *pAttr = _attrSeq.elementAtPosition(i);
+            attrString += " "+ pAttr->Name+"=\""+pAttr->Value+"\"";
+        }
+        if( _nodeValue.length() ||_childSeq.numberOfElements() > 0 ) out += attrString+">"+_nodeValue;
+        else out += attrString; //Closing '/>' will be done below
+    }
+    for( int i = 1; i <= _childSeq.numberOfElements(); ++i )
+    {
+        out += "\n"+_childSeq.elementAtPosition(i)->internal_toString(indentCount+1);
+        printf("internal_toString, out(1): child: %i, %s\n", i, (char*) out);
+    }
+    if( _tagName.strip().length() > 0 )
+    {
+        if( _childSeq.numberOfElements() ) out += "\n"+indent+"</"+_tagName+">";
+        else out = out.stripTrailing(" ") + "/>";
+    }
+    printf("internal_toString, out: %s\n", (char*) out);
+    return out;
+}
+
+
 void GXmlNode::deb(GString msg)
 {
-    printf("GXmlNode> %s\n", (char*) msg);
+    //printf("GXmlNode> %s<-\n", (char*) msg);
 #ifdef MAKE_VC
     _flushall();
 #endif
@@ -172,6 +249,10 @@ GXml::GXml()
     _blockSeq.removeAll();
     _lastErrCode = 0;
     _isInComment = 0;
+    pRootNode = new GXmlNode();
+    pRootNode->setTagName("");
+    pRootNode->setFullPath("");
+    _xmlStartDeclaration = "<?xml version=\"1.0\" encoding=\"utf-8\"?>";
 }
 
 GXml::GXml( const GXml &x )
@@ -179,17 +260,24 @@ GXml::GXml( const GXml &x )
     deb("Ctor copy");
     _lastErrCode = 0;
     _xmlAsString = x._xmlAsString;
-    _isInComment = 0;
+    _isInComment = x.pRootNode->_inComment;
+    pRootNode = new GXmlNode();
+    pRootNode->setTagName(x.pRootNode->_tagName);
+    pRootNode->setFullPath(x.pRootNode->_fullPath);
 }
 
 GXml::GXml(GString xmlAsString)
 {
     deb("Ctor from string");
+    pRootNode = new GXmlNode();
+    pRootNode->setTagName("");
+    pRootNode->setFullPath("");
     _blockSeq.removeAll();
     _xmlAsString = xmlAsString.strip();
-    _xmlFullSource = _xmlAsString;
+
     _lastErrCode = 0;
     _isInComment = 0;
+    removeStartToken(_xmlAsString);
     //fillCommentSeq();
 }
 
@@ -198,8 +286,17 @@ GXml::~GXml()
     _blockSeq.removeAll();
 }
 
+void GXml::create()
+{
+   _xmlStartDeclaration = "<?xml version=\"1.0\" encoding=\"utf-8\"?>\n";
+
+}
+
+
 int GXml::readFromFile(GString fileName)
 {
+    if( !isValid(fileName) ) return 1;
+
     deb("readFromFile start");
     _blockSeq.removeAll();
     _lastErrCode = 0;
@@ -274,7 +371,7 @@ int GXml::readFromFile(GString fileName)
     buf[++idx] = 0;
     _xmlAsString = GString(buf);
     delete [] buf;
-    printf("_xmlAsString: %s\n", (char*)_xmlAsString);
+    //printf("_xmlAsString: %s\n", (char*)_xmlAsString);
     cleanInput();
     deb("readFromFile done reading");
 
@@ -285,6 +382,31 @@ int GXml::readFromFile(GString fileName)
     deb("readFromFile end");
     //fillCommentSeq();
     return 0;
+}
+
+int GXml::isValid(GString fileName)
+{
+    FILE *fp;
+    fp = fopen(fileName, "r");
+    if( !fp )
+    {
+        _lastErrCode = 1001;
+        return _lastErrCode;
+    }
+    rewind(fp);
+
+    char ch;
+
+    int opn, cls;
+    opn = cls = 0;
+    while((ch = fgetc(fp)) != EOF)
+    {
+        if( ch == '<' ) opn++;
+        else if( ch == '>' ) cls++;
+    }
+    fclose(fp);
+    if( opn != cls ) return 0;
+    return 1;
 }
 
 GString GXml::formatXmlString(GString data)
@@ -722,7 +844,7 @@ GString GXml::getAttribute(GString name)
         if( _attrSeq.elementAtPosition(i).Name == name )
         {
             deb("getAttribute, item found, end");
-            return _attrSeq.elementAtPosition(i).Value;
+            return GStuff::changeFromXml(_attrSeq.elementAtPosition(i).Value);
         }
     }
     deb("getAttribute, item not found, end");
@@ -815,55 +937,17 @@ GString GXml::getFormattedXml()
     return out;
 }
 
-GString GXmlNode::toString()
-{
-    return internal_toString(0);
-}
-
-GString GXmlNode::internal_toString(int indentCount)
-{
-    GString indent;
-    GString out;
-    GString attrString;
-    if( _tagName.strip().length() == 0 && _nodeValue.length() )
-    {
-        return _nodeValue;
-    }
-    if( _tagName.strip().length() > 0 )
-    {
-        for(int i = 0; i < indentCount; ++i ) indent += "   ";
-        out += indent+"<"+_tagName+" ";
-        for(int i = 1; i <= _attrSeq.numberOfElements(); ++i )
-        {
-            GXML_ATTR *pAttr = _attrSeq.elementAtPosition(i);
-            attrString += pAttr->Name+"=\""+pAttr->Value+"\" ";
-        }
-        out += attrString+">"+_nodeValue;
-    }
-    for( int i = 1; i <= _childSeq.numberOfElements(); ++i )
-    {
-        out += "\n"+_childSeq.elementAtPosition(i)->internal_toString(indentCount+1);
-    }
-    if( _tagName.strip().length() > 0 )
-    {
-        if( _childSeq.numberOfElements() ) out += "\n"+indent+"</"+_tagName+">";
-        else out += "</"+_tagName+">";
-    }
-    return out;
-}
-
-
 GXmlNode * GXml::nodeFromXPath(GString xpath)
 {
     GXmlNode* pNode = pRootNode;
     xpath = xpath.stripTrailing('/').stripLeading('/');
-
+    if( pNode == NULL ) return NULL;
     GSeq<GString> elmtSeq= xpath.split("/");
     for( int i = 1; i <= elmtSeq.numberOfElements(); ++i )
     {
         deb("XPathElmt "+GString(i)+": "+elmtSeq.elementAtPosition(i));
         pNode = pNode->child(elmtSeq.elementAtPosition(i));
-        if( pNode == NULL ) break;
+        if( pNode == NULL || pNode->child(elmtSeq.elementAtPosition(i)) == NULL ) break;
         deb("Found "+pNode->tagName());
     }
     return pNode;
@@ -884,20 +968,19 @@ void GXml::readAllNodes(GString input)
     int pos = 0;
     GString currentNode = "";
     int inComment = 0;
-
-    pRootNode = new GXmlNode();
-    pRootNode->setTagName("");
-    pRootNode->setFullPath("");
+    int emergencyBreak = 0;
 
     GXmlNode * pXmlNode;    
     GXmlNode * pCurrentParent = pRootNode;
 
     input = removeStartToken(input);
+    int fullLength = input.length();
 
-    while( input.strip().length() )
+    while( input.strip().length() && emergencyBreak < fullLength )
     {
-
+        emergencyBreak++;
         pos = input.indexOf("<");
+        if( pos < 1 ) return;
         deb("CURIN: "+input);
         //deb("pos: "+GString(pos));
 
@@ -920,7 +1003,7 @@ void GXml::readAllNodes(GString input)
             input = input.remove(1, input.indexOf("-->")+2 );
             pXmlNode = new GXmlNode(pCurrentParent);
             pXmlNode->setNodeValue(comment);
-            pCurrentParent->addChildNode(pXmlNode);
+            pCurrentParent->addNode(pXmlNode);
 
             //input = input.remove(1, 4);
         }
@@ -938,7 +1021,7 @@ void GXml::readAllNodes(GString input)
             pXmlNode->setFullPath(currentNode);
             pXmlNode->setAttributeSeq(fillAttributeSeq(input.subString(1, end)));
             pXmlNode->setNodeValue(getValue(input));
-            pCurrentParent->addChildNode(pXmlNode);
+            pCurrentParent->addNode(pXmlNode);
             deb("Adding "+pXmlNode->tagName()+" as child to "+pCurrentParent->tagName() );
             newNode = 1;
 
@@ -1068,7 +1151,7 @@ GString GXml::getNodeName(GString in)
     GString nodeName = in.subString(start+1, end-start-1);
     if( nodeName.occurrencesOf(' ')) nodeName = nodeName.subString(1, nodeName.indexOf(' ')-1);
     //deb("--getNodeName: in: "+in+", start: "+GString(start)+", end: "+GString(end));
-    return nodeName;
+    return nodeName.stripTrailing('/');
 }
 
 void GXml::readAllWords()
@@ -1252,7 +1335,7 @@ void GXml::setIsInComment(int start, int end)
 
 GString GXml::toString()
 {
-    return _xmlAsString;
+    return _xmlStartDeclaration + pRootNode->toString();
 }
 
 void GXml::cleanInput()
@@ -1288,7 +1371,8 @@ int GXml::lastErrCode()
 void GXml::deb(GString in)
 {
     in = "["+GStuff::GetTime()+"] GXml> "+in;
-    printf("%s\n", (char*) in);
+//    printf("%s\n", (char*) in);
+
 #ifdef MAKE_VC
     _flushall();
 #endif

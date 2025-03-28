@@ -83,7 +83,8 @@ public:
     VCExport static GString setDbQuotes(GString in);
     VCExport static GString breakLongLine(GString txt, int maxLen);
     VCExport static GString wrap(GString in);
-    VCExport static GString formatForXml(GString in);
+    VCExport static GString changeToXml(GString in);
+    VCExport static GString changeFromXml(GString in);
     VCExport static GString decorateTabName(GString in);
     VCExport static void xorEncrypt(GString key, GString& txt, int txtLen);
     VCExport static void xor_encrypt(char *key, char *input, int n);

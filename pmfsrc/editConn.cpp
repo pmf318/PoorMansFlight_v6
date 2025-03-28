@@ -323,7 +323,7 @@ void EditConn::testConnClicked()
     if( !err.length() )
     {
         msg("Success! Connection established.");
-        m_pPwdLE->setText(res);
+        if( res.length() ) m_pPwdLE->setText(res);
     }
     else msg("Could not connect: \n"+err);
     delete pDSQL;

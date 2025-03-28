@@ -65,12 +65,13 @@ void ConnSet::initConnSet(int mode)
     m_twMain = NULL;
     m_strErrorMessages = "";
 
-/* Either this...
+/* Either this... remember to also set save()->saveAsXml()*/
+
     moveToXmlFormat();
     loadFromXmlFile();
-*/
-//...or this
-    loadFromFile();
+
+////...or this
+//    loadFromFile();
 
 
     deb("connSet start");
@@ -190,8 +191,56 @@ void ConnSet::clearSeq(GSeq <CON_SET*> *pSeq)
     deb("connSet: clearSeq ok");
 }
 
+int ConnSet::saveAsXml2()
+{
+    m_strErrorMessages = "";
+    if( m_pMainWdgt)
+    {
+        writeToSeq();
+    }
+    GXml conXml("<?xml version=\"1.0\" encoding=\"utf-8\"?>");
+    GXmlNode * rootNode = conXml.getRootNode();
+    GXmlNode * pTopNode = rootNode->addNode("Connections");
+    CON_SET *pCS;
+    for(int i = 1; i <= (int)m_seqFileCons.numberOfElements(); ++ i)
+    {
+        pCS = m_seqFileCons.elementAtPosition(i);
+        pCS->CSVer = ConnSetVer;
+
+        GXmlNode * pNode = pTopNode->addNode("Connection");
+        pNode->addAttribute("isDefault", GString(pCS->DefDB));
+        pNode->addAttribute("type", pCS->Type);
+        pNode->addAttribute("db", pCS->DB);
+        pNode->addAttribute("uid", pCS->UID);
+        pNode->addAttribute("pwd", GStuff::encryptToBase64(pCS->PWD));
+        pNode->addAttribute("host", pCS->Host);
+        pNode->addAttribute("port", pCS->Port);
+        pNode->addAttribute("pwdCmd", pCS->PwdCmd);
+        pNode->addAttribute("color", pCS->Color);
+        pNode->addAttribute("options", pCS->Options);
+        pNode->addAttribute("reconnTimeout", pCS->ReconnTimeout);
+        pNode->addAttribute("version", GString(pCS->CSVer));
+    }
+    printf(" XML: %s\n", (char*) conXml.toString());
+    Helper::createFileIfNotExist(cfgFileNameXml());
+    GFile f( cfgFileNameXml(), GF_OVERWRITE );
+    if( f.initOK() )    {
+        f.addLine(conXml.toString());
+    }
+    else deb("connSet: cfgFileName: "+ cfgFileName()+" FAILED");
+    m_iChanged = 0;
+    msg("Please connect/reconnect for changes to take effect.");
+    if( m_iMode == CONNSET_MODE_NORM ) close();
+    return 0;
+
+    return 0;
+}
+
 int ConnSet::saveAsXml()
 {
+    return saveAsXml2();
+
+    /***************** DEAD **************
     m_strErrorMessages = "";
     if( m_pMainWdgt)
     {
@@ -217,7 +266,7 @@ int ConnSet::saveAsXml()
         out += "pwd=\""+GStuff::encryptToBase64(pCS->PWD)+"\" ";
         out += "host=\""+pCS->Host+"\" ";
         out += "port=\""+pCS->Port+"\" ";
-        out += "pwdCmd=\""+pCS->PwdCmd+"\" ";
+        out += "pwdCmd=\""+GStuff::changeToXml(pCS->PwdCmd)+"\" ";
         out += "color=\""+pCS->Color+"\" ";
         out += "options=\""+pCS->Options+"\" ";
         out += "reconnTimeout=\""+GString(pCS->ReconnTimeout)+"\" ";
@@ -242,11 +291,14 @@ int ConnSet::saveAsXml()
     msg("Please connect/reconnect for changes to take effect.");
     if( m_iMode == CONNSET_MODE_NORM ) close();
     return 0;
-
+    ************/
 }
 
 int ConnSet::save()
 {
+    return saveAsXml();
+
+    /*** Obsolete **/
     m_strErrorMessages = "";
     if( m_pMainWdgt)
     {
@@ -873,6 +925,8 @@ GString ConnSet::cfgFileNameXml()
 {
 	QString home = QDir::homePath ();
 	if( !home.length() ) return "";
+    return basePath() + _CONNSET_XML;
+
     #if defined(MAKE_VC) || defined (__MINGW32__)
     return GString(home)+"\\"+_CFG_DIR+"\\"+_CONNSET_XML;
 	#else
@@ -884,12 +938,15 @@ GString ConnSet::cfgFileName()
 {
     QString home = QDir::homePath ();
     if( !home.length() ) return "";
+    return basePath() + _CONNSET_FILE;
+
     #if defined(MAKE_VC) || defined (__MINGW32__)
     return GString(home)+"\\"+_CFG_DIR+"\\"+_CONNSET_FILE;
     #else
     return GString(home)+"/."+_CFG_DIR + "/"+_CONNSET_FILE;
     #endif
 }
+
 
 int ConnSet::loadFromXmlFile()
 {
@@ -901,7 +958,58 @@ int ConnSet::loadFromXmlFile()
     int erc = fXml.readFromFile(cfgFileNameXml());
     if( erc ) return erc;
 
+
+    GXmlNode *connNodes = fXml.nodeFromXPath("/Connections");
+    if( connNodes == NULL ) return 1;
+    clearSeq(&m_seqFileCons);
+    CON_SET * pConSet;
+
+    int count = connNodes->childCount();
+    deb("connset, loadFromXmlFile, loading "+GString(count)+" items...");
+    for(int i=1; i <= count; ++i )
+    {
+        GXmlNode *connNode = connNodes->childAtPosition(i);
+        if( connNode->tagName() != "Connection" ) continue;
+        pConSet = new CON_SET;
+        pConSet->init();
+        pConSet->DefDB = connNode->getAttributeValue("isDefault").asInt();
+        pConSet->Type = connNode->getAttributeValue("type");
+        pConSet->Type = connNode->getAttributeValue("type");
+        pConSet->DB = connNode->getAttributeValue("db");
+        pConSet->Host = connNode->getAttributeValue("host");
+        pConSet->Port = connNode->getAttributeValue("port");
+        pConSet->Color = connNode->getAttributeValue("color");
+        pConSet->UID = connNode->getAttributeValue("uid");
+        pConSet->PWD = GStuff::decryptFromBase64(connNode->getAttributeValue("pwd"));
+        pConSet->PwdCmd = connNode->getAttributeValue("pwdCmd");
+        pConSet->Options = connNode->getAttributeValue("options");
+        GString recTo = connNode->getAttributeValue("reconnTimeout");
+        if( !recTo.length() ) pConSet->ReconnTimeout = 0;
+        else pConSet->ReconnTimeout = recTo.asInt();
+        GString s = connNode->getAttributeValue("reconnTimeout");
+        pConSet->CSVer = connNode->getAttributeValue("version").asInt();
+        //deb("connset, loadFromFile, adding ToSeq...");
+        addToSeq(&m_seqFileCons, pConSet);
+    }
+
+    deb("connset, loadFromXmlFile done. elmts: "+GString(m_seqFileCons.numberOfElements()));
+
+    return 0;
+}
+
+/*
+int ConnSet::loadFromXmlFile()
+{
+    deb("connset, loadFromXmlFile");
+    QString home = QDir::homePath ();
+    if( !home.length() ) return 1;
+
+    GXml fXml;
+    int erc = fXml.readFromFile(cfgFileNameXml());
+    if( erc ) return erc;
+
     GXml outXml = fXml.getBlocksFromXPath("/Connections/Connection");
+    //GXmlNode tmpNode= fXml.nodeFromXPath("/Connections"); -> for() getChildNodes....
     int count = outXml.countBlocks("Connection");
 
     clearSeq(&m_seqFileCons);
@@ -935,7 +1043,7 @@ int ConnSet::loadFromXmlFile()
 
     return 0;
 }
-
+*/
 int ConnSet::loadFromFile()
 {    
     deb("connset, loadFromFile");
@@ -1296,11 +1404,15 @@ void ConnSet::moveToXmlFormat()
     GString fileName;
     QString home = QDir::homePath ();
     if( !home.length() ) return;
+
+    fileName = basePath() + _CONNSET_XML;
+    /*
     #if defined(MAKE_VC) || defined (__MINGW32__)
     fileName = GString(home)+"\\"+_CFG_DIR+"\\"+_CONNSET_XML;
     #else
     fileName = GString(home)+"/."+_CFG_DIR + "/"+_CONNSET_XML;
     #endif
+    */
     GFile f(fileName);
     if(f.initOK())
     {
@@ -1312,13 +1424,18 @@ void ConnSet::moveToXmlFormat()
     loadFromFile();
     deb("moveToXmlFormat saving in new format...");
     saveAsXml();
+
+    fileName = basePath() + _CONNSET_FILE;
+    /*
     #if defined(MAKE_VC) || defined (__MINGW32__)
     fileName = GString(home)+"\\"+_CFG_DIR+"\\"+_CONNSET_FILE;
     #else
     fileName = GString(home)+"/."+_CFG_DIR + "/"+_CONNSET_FILE;
     #endif
+    */
     deb("moveToXmlFormat removing old file");
-    remove(fileName);
+    rename(fileName, fileName+".old");
+
 }
 
 void ConnSet::migrateData()

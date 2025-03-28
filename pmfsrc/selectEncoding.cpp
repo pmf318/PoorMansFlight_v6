@@ -7,13 +7,14 @@
 #include "pmfdefines.h"
 #include "gfile.hpp"
 #include "helper.h"
+
 #include <qlayout.h>
 //Added by qt3to4:
 #include <QVBoxLayout>
 #include <QGridLayout>
 #include <QMessageBox>
 
-
+static GString ENC_ALL_DB =  "ENC_ALL_DB";
 
 SelectEncoding::SelectEncoding(DSQLPlugin* pDSQL, QWidget *parent )
   :QDialog(parent) //, f("Charter", 48, QFont::Bold)
@@ -158,17 +159,152 @@ void SelectEncoding::keyPressEvent(QKeyEvent *event)
     }
 }
 
+GString SelectEncoding::getEncFileName()
+{
+    QString home = QDir::homePath ();
+    if( !home.length() ) return "";
+    GString path;
+#if defined(MAKE_VC) || defined (__MINGW32__)
+    path = GString(home)+"\\"+_CFG_DIR+"\\"+_ENCODINGS_FILE+".xml";
+#else
+    path = GString(home)+"/."+_CFG_DIR + "/"+_ENCODINGS_FILE+".xml";
+#endif
+    return path;
+}
+
+GString SelectEncoding::getEncodingFromXml(DSQLPlugin* pDSQL)
+{
+    CON_SET curSet;
+    pDSQL->currentConnectionValues(&curSet);
+    GXml fXml;
+    int erc = fXml.readFromFile(SelectEncoding::getEncFileName());
+    if( erc ) return NULL;
+
+    GXmlNode *encNodes = fXml.nodeFromXPath("/Encodings");
+    if( encNodes == NULL ) return NULL;
+
+    int count = encNodes->childCount();
+    for(int i=1; i <= count; ++i )
+    {
+        GXmlNode *encNode = encNodes->childAtPosition(i);
+        if( encNode->tagName() != "Encoding" ) continue;
+        if( encNode->getAttributeValue("dbtype") == curSet.Type && encNode->getAttributeValue("host") == curSet.Host &&
+            encNode->getAttributeValue("port") == curSet.Port && encNode->getAttributeValue("db") == curSet.DB &&
+            encNode->getAttributeValue("user") == curSet.UID   )
+        {
+            return encNode->getAttributeValue("encoding");
+        }
+    }
+    return "";
+}
+
+void SelectEncoding::createMissingXml()
+{
+    GFile f(SelectEncoding::getEncFileName());
+    if( f.initOK() ) return;
+
+    GXml gXml;
+    gXml.create();
+    GXmlNode * rootNode = gXml.getRootNode();
+    rootNode->addNode("Encodings");
+
+    GFile out( SelectEncoding::getEncFileName(), GF_OVERWRITE);
+    if( out.initOK() )    {
+        out.addLine(gXml.toString());
+    }
+}
+
+int SelectEncoding::saveAsXml()
+{
+    SelectEncoding::createMissingXml();
+    GXml gXml;
+    gXml.readFromFile(SelectEncoding::getEncFileName());
+
+    CON_SET curSet;
+    m_pDSQL->currentConnectionValues(&curSet);
+    curSet.CltEnc = GString(m_encListCB->currentText());
+
+    GXmlNode *encNodes = gXml.nodeFromXPath("/Encodings");
+    GXmlNode *encNode;
+    if( encNodes == NULL ) return 2;
+
+    int found = 0;
+    int count = encNodes->childCount();
+    for(int i=1; i <= count; ++i )
+    {
+        encNode = encNodes->childAtPosition(i);
+        if( encNode->tagName() != "Encoding" ) continue;
+        if( encNode->getAttributeValue("dbtype") == curSet.Type && encNode->getAttributeValue("host") == curSet.Host &&
+            encNode->getAttributeValue("port") == curSet.Port && encNode->getAttributeValue("db") == curSet.DB &&
+            encNode->getAttributeValue("user") == curSet.UID   )
+        {
+            encNode->setAttributeValue("encoding", curSet.CltEnc);
+            found = 1;
+        }
+    }
+    if( !found )
+    {
+        encNode = encNodes->addNode("Encoding");
+        encNode->addAttribute("dbtype", curSet.Type);
+        encNode->addAttribute("host", curSet.Host);
+        encNode->addAttribute("port", curSet.Port);
+        encNode->addAttribute("db", curSet.DB);
+        encNode->addAttribute("user", curSet.UID);
+        encNode->addAttribute("encoding", curSet.CltEnc);
+    }
+    GFile f( SelectEncoding::getEncFileName(), GF_OVERWRITE );
+    if( f.initOK() )    {
+        f.addLine(gXml.toString());
+    }
+}
+
+int SelectEncoding::convertToXml()
+{
+    GFile f, x;
+    GString oldPath = basePath() + _ENCODINGS_FILE;
+    GString xmlPath = basePath() + _ENCODINGS_FILE+".xml";
+    x.readFile(xmlPath);
+    //Already converted to xml
+    if( x.initOK() ) return 0;
+
+    SelectEncoding::createMissingXml();
+    GXml gXml;
+    gXml.readFromFile(SelectEncoding::getEncFileName());
+
+    GString line;
+    f.readFile(oldPath);
+    CON_SET storeSet;
+
+    GXmlNode *encNodes = gXml.nodeFromXPath("/Encodings");
+    GXmlNode *encNode;
+
+    for(int i = 1; i <= f.lines(); ++i )
+    {
+        line = f.getLine(i);
+        if( Helper::connSetFromString(line, &storeSet) != 0 ) continue;
+        encNode = encNodes->addNode("Encoding");
+        encNode->addAttribute("dbtype", storeSet.Type);
+        encNode->addAttribute("host", storeSet.Host);
+        encNode->addAttribute("port", storeSet.Port);
+        encNode->addAttribute("db", storeSet.DB);
+        encNode->addAttribute("user", storeSet.UID);
+        encNode->addAttribute("encoding", storeSet.CltEnc);
+    }
+    GFile out( SelectEncoding::getEncFileName(), GF_OVERWRITE );
+    if( out.initOK() )    {
+        out.addLine(gXml.toString());
+    }
+    return 0;
+}
+
 int SelectEncoding::saveEncoding()
 {
+    return saveAsXml();
     GString path;
     QString home = QDir::homePath ();
     if( !home.length() ) return 1;
 
-#if defined(MAKE_VC) || defined (__MINGW32__)
-    path = GString(home)+"\\"+_CFG_DIR+"\\"+_ENCODINGS_FILE;
-#else
-    path = GString(home)+"/."+_CFG_DIR + "/"+_ENCODINGS_FILE;
-#endif
+    path = basePath() + _ENCODINGS_FILE;
     GString line;
     GFile f;
     f.readFile(path);
@@ -205,6 +341,8 @@ int SelectEncoding::saveEncoding()
 
 GString SelectEncoding::getEncoding(DSQLPlugin* pDSQL )
 {
+
+    return getEncodingFromXml(pDSQL);
     QString home = QDir::homePath ();
     if( !home.length() ) return "";
     GString path;

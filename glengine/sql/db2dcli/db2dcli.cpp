@@ -1855,6 +1855,9 @@ int db2dcli::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
    //DB2 v10: Column DEFAULT in SYSCAT.COLUMN is now CLOB (used to be VARCHAR). Sigh. We need to read the CLOB.
     this->setCLOBReader(1); //This will read any CLOB into fieldData
 
+    db2dcli tmpSql(*this);
+    tmpSql.initAll("select * from "+table, 0);
+
 
     GString cmd = "select colname, typename, length, scale, nulls, default, logged, compact, identity, generated, codepage "
         " from syscat.columns "
@@ -1873,31 +1876,32 @@ int db2dcli::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         cSpec->init();
 
         cSpec->ColName = this->rowElement(i,1).strip("'");
+        cSpec->ColType = tmpSql.sqlType(cSpec->ColName);
 
         /* colType CHARACTER (from syscat.tables) needs to be truncated to CHAR */
-        cSpec->ColType = this->rowElement(i,2).strip("'");
-        if( cSpec->ColType == "CHARACTER" ) cSpec->ColType = "CHAR";
+        cSpec->ColTypeName = this->rowElement(i,2).strip("'");
+        if( cSpec->ColTypeName == "CHARACTER" ) cSpec->ColTypeName = "CHAR";
 
 
         /* SMALLINT, INTEGER, BIGINT, DOUBLE */
-        if( cSpec->ColType.occurrencesOf("INT") > 0 ||
-                cSpec->ColType.occurrencesOf("DOUBLE") > 0 ||
-                cSpec->ColType.occurrencesOf("DATE") > 0 ||
-                cSpec->ColType.occurrencesOf("XML") > 0 ||
-                cSpec->ColType.occurrencesOf("TIME"))
+        if( cSpec->ColTypeName.occurrencesOf("INT") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("DOUBLE") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("DATE") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("XML") > 0 ||
+                cSpec->ColTypeName.occurrencesOf("TIME"))
         {
             cSpec->Length = "N/A";
         }
         /* DECIMAL: (LENGTH, SCALE) */
-        else if( cSpec->ColType.occurrencesOf("DECIMAL") )
+        else if( cSpec->ColTypeName.occurrencesOf("DECIMAL") )
         {
             cSpec->Length = this->rowElement(i,3)+", "+this->rowElement(i,4);
         }
-        else if( cSpec->ColType.occurrencesOf("XML") )
+        else if( cSpec->ColTypeName.occurrencesOf("XML") )
         {
             cSpec->Length = "0";
         }
-        else if( cSpec->ColType.occurrencesOf("LONG VARCHAR") || cSpec->ColType.occurrencesOf("LONG CHAR") )
+        else if( cSpec->ColTypeName.occurrencesOf("LONG VARCHAR") || cSpec->ColTypeName.occurrencesOf("LONG CHAR") )
         {
             cSpec->Length = "N/A";
         }
@@ -1906,7 +1910,7 @@ int db2dcli::getColSpecs(GString table, GSeq<COL_SPEC*> *specSeq)
         {
             cSpec->Length = this->rowElement(i,3);
         }
-        if( (cSpec->ColType.occurrencesOf("CHAR"))  && this->rowElement(i, 11) == "0" ) //codepage is 0 for CHAR FOR BIT
+        if( (cSpec->ColTypeName.occurrencesOf("CHAR"))  && this->rowElement(i, 11) == "0" ) //codepage is 0 for CHAR FOR BIT
         {
             cSpec->Misc = "FOR BIT DATA";
         }

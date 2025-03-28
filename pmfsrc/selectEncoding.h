@@ -22,8 +22,7 @@
 
 #include <gseq.hpp>
 #include <dsqlplugin.hpp>
-
-static GString ENC_ALL_DB =  "ENC_ALL_DB";
+#include "gxml.hpp"
 
 #ifndef _SELECT_ENCODING_
 #define _SELECT_ENCODING_
@@ -36,6 +35,8 @@ public:
     ~SelectEncoding();
     GString encoding();
     static GString getEncoding(DSQLPlugin* pDSQL);
+    static int convertToXml();
+
 
 private slots:
     void OKClicked();
@@ -49,7 +50,11 @@ private:
     DSQLPlugin* m_pDSQL;
     void msg(GString message);
     GString getCurrentEncoding(GString cmd);
+    static GString getEncFileName();
     int saveEncoding();
+    static void createMissingXml();
+    int saveAsXml();
+    static GString getEncodingFromXml(DSQLPlugin* pDSQL);
 
     GString m_selectedEncoding;
 };

@@ -126,6 +126,7 @@ private:
     GSeq <CON_SET* > m_seqFileCons;
     GSeq <CON_SET* > m_seqCatalogCons;
     GString m_strErrorMessages;
+    int saveAsXml2();
 
 
 };
